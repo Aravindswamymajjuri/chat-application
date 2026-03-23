@@ -61,6 +61,14 @@
   flex-direction: column;
   max-width: 70%;
   gap: 4px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+  transition: all 0.2s;
+}
+
+.message:hover {
+  background: rgba(0, 0, 0, 0.02);
 }
 
 .message.sent {

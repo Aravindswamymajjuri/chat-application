@@ -9,5 +9,6 @@ router.post('/update-fcm-token', authController.updateFCMToken);
 router.post('/set-app-lock', authController.setAppLockPassword);
 router.post('/verify-app-lock', authController.verifyAppLockPassword);
 router.get('/check-app-lock', authController.checkAppLock);
+router.post('/toggle-app-lock', authController.toggleAppLock);
 
 module.exports = router;

@@ -201,3 +201,33 @@ exports.checkAppLock = async (req, res) => {
     res.status(500).json({ message: 'Error checking app lock', error: error.message });
   }
 };
+
+// Disable or enable app lock
+exports.toggleAppLock = async (req, res) => {
+  try {
+    const { username, enabled } = req.body;
+
+    if (!username || enabled === undefined) {
+      return res.status(400).json({ message: 'username and enabled required' });
+    }
+
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    user.hasAppLock = enabled;
+    await user.save();
+
+    const status = enabled ? 'enabled' : 'disabled';
+    console.log(`✅ App lock ${status} for user: ${username}`);
+    
+    res.status(200).json({ 
+      message: `App lock ${status} successfully`,
+      hasAppLock: enabled
+    });
+  } catch (error) {
+    console.error('💥 Error toggling app lock:', error.message);
+    res.status(500).json({ message: 'Error toggling app lock', error: error.message });
+  }
+};

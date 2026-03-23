@@ -3,7 +3,7 @@ import { usersAPI } from '../utils/api';
 import { emitUserJoin } from '../utils/socket';
 import '../styles/Sidebar.css';
 
-const Sidebar = ({ currentUser, selectedUser, onSelectUser, users, setUsers }) => {
+const Sidebar = ({ currentUser, selectedUser, onSelectUser, users, setUsers, hasAppLock, onToggleAppLock, onSettings, onLogout }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -31,6 +31,30 @@ const Sidebar = ({ currentUser, selectedUser, onSelectUser, users, setUsers }) =
           <span className="current-user-name">{currentUser.username}</span>
           <div className="user-status online"></div>
         </div>
+      </div>
+
+      <div className="sidebar-buttons">
+        <button 
+          className={`app-lock-btn ${hasAppLock ? 'active' : ''}`}
+          onClick={onToggleAppLock}
+          title={hasAppLock ? 'App lock enabled' : 'App lock disabled'}
+        >
+          {hasAppLock ? '🔒 Lock ON' : '🔓 Lock OFF'}
+        </button>
+        <button 
+          className="settings-btn"
+          onClick={onSettings}
+          title="Settings"
+        >
+          ⚙️
+        </button>
+        <button 
+          className="logout-btn"
+          onClick={onLogout}
+          title="Logout"
+        >
+          🚪
+        </button>
       </div>
 
       <input

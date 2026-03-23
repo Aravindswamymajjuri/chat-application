@@ -110,6 +110,21 @@ const ChatPage = ({ currentUser, onLogout }) => {
     setAppLockModalOpen(false);
   };
 
+  const handleToggleAppLock = async () => {
+    try {
+      if (hasAppLock) {
+        // Turn OFF app lock - but first set a flag to know it's disabled
+        // For now, we show settings to disable it
+        setSettingsModalOpen(true);
+      } else {
+        // Turn ON app lock - show settings to set password
+        setSettingsModalOpen(true);
+      }
+    } catch (error) {
+      console.error('Error toggling app lock:', error);
+    }
+  };
+
   const handleMessageSent = (message) => {
     setMessages((prev) => [...prev, message]);
   };
@@ -126,6 +141,8 @@ const ChatPage = ({ currentUser, onLogout }) => {
         currentUsername={currentUser.username}
         isOpen={settingsModalOpen}
         onClose={() => setSettingsModalOpen(false)}
+        hasAppLock={hasAppLock}
+        onAppLockChange={(enabled) => setHasAppLock(enabled)}
       />
 
       <Sidebar
@@ -134,6 +151,10 @@ const ChatPage = ({ currentUser, onLogout }) => {
         onSelectUser={setSelectedUser}
         users={users}
         setUsers={setUsers}
+        hasAppLock={hasAppLock}
+        onToggleAppLock={handleToggleAppLock}
+        onSettings={() => setSettingsModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       <div className="chat-main">

@@ -155,8 +155,7 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
               className={`message ${msg.sender === currentUser.username ? 'sent' : 'received'} ${
                 msg.deletedForMe ? 'deleted' : ''
               }`}
-              onMouseEnter={() => setActiveMessageId(msg._id)}
-              onMouseLeave={() => setActiveMessageId(null)}
+              onClick={() => setActiveMessageId(activeMessageId === msg._id ? null : msg._id)}
             >
               {msg.replyTo && (
                 <div className="message-reply-quote">

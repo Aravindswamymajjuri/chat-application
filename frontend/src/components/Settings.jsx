@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { authAPI } from '../utils/api';
 import '../styles/Settings.css';
 
-const Settings = ({ currentUsername, isOpen, onClose }) => {
+const Settings = ({ currentUsername, isOpen, onClose, hasAppLock, onAppLockChange }) => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
@@ -36,6 +36,11 @@ const Settings = ({ currentUsername, isOpen, onClose }) => {
     try {
       await authAPI.setAppLockPassword(currentUsername, password);
       setSuccess('App lock password set successfully! 🔒');
+      
+      // Enable app lock
+      await authAPI.toggleAppLock(currentUsername, true);
+      onAppLockChange?.(true);
+      
       setTimeout(() => {
         setPassword('');
         setConfirmPassword('');
@@ -43,6 +48,26 @@ const Settings = ({ currentUsername, isOpen, onClose }) => {
       }, 2000);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to set app lock password');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisableAppLock = async () => {
+    setLoading(true);
+    setError('');
+    setSuccess('');
+
+    try {
+      await authAPI.toggleAppLock(currentUsername, false);
+      setSuccess('App lock disabled ✓');
+      onAppLockChange?.(false);
+      
+      setTimeout(() => {
+        onClose();
+      }, 1500);
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to disable app lock');
     } finally {
       setLoading(false);
     }
@@ -58,14 +83,41 @@ const Settings = ({ currentUsername, isOpen, onClose }) => {
 
         <div className="settings-content">
           <div className="settings-section">
-            <h3>🔒 App Lock Password</h3>
+            <h3>🔒 App Lock</h3>
+            
+            {hasAppLock ? (
+              <div className="app-lock-status active">
+                <p className="status-text">✓ App lock is <strong>ENABLED</strong></p>
+                <p className="settings-description">
+                  Your chat app is protected with a password.
+                </p>
+                <button 
+                  type="button"
+                  disabled={loading}
+                  className="disable-btn"
+                  onClick={handleDisableAppLock}
+                >
+                  {loading ? 'Disabling...' : 'Disable App Lock'}
+                </button>
+              </div>
+            ) : (
+              <div className="app-lock-status inactive">
+                <p className="status-text">✗ App lock is <strong>DISABLED</strong></p>
+                <p className="settings-description">
+                  No password protection. Set a password below to enable app lock.
+                </p>
+              </div>
+            )}
+            
+            <div className="divider"></div>
+            
             <p className="settings-description">
               Set a password to lock the entire chat app. You'll need to unlock it when switching tabs or after refreshing the page.
             </p>
 
             <form onSubmit={handleSetAppLock} className="settings-form">
               <div className="form-group">
-                <label htmlFor="password">New Password</label>
+                <label htmlFor="password">Password</label>
                 <input
                   id="password"
                   type="password"
@@ -100,7 +152,7 @@ const Settings = ({ currentUsername, isOpen, onClose }) => {
               {success && <div className="success-message">{success}</div>}
 
               <button type="submit" disabled={loading} className="submit-btn">
-                {loading ? 'Setting...' : 'Set App Lock'}
+                {loading ? 'Setting...' : 'Set App Lock Password'}
               </button>
             </form>
           </div>

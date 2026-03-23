@@ -49,6 +49,54 @@
   background: #999;
 }
 
+.sidebar-buttons {
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fafafa;
+  flex-wrap: wrap;
+}
+
+.app-lock-btn,
+.settings-btn,
+.logout-btn {
+  flex: 1;
+  min-width: 60px;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s;
+  background: white;
+  color: #333;
+}
+
+.app-lock-btn:hover {
+  background: #f0f0f0;
+  border-color: #667eea;
+}
+
+.app-lock-btn.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.settings-btn:hover {
+  background: #f0f0f0;
+  border-color: #999;
+}
+
+.logout-btn:hover {
+  background: #ffebee;
+  border-color: #ef5350;
+  color: #ef5350;
+}
+
 .search-box {
   padding: 12px;
   margin: 10px;

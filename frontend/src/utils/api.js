@@ -22,7 +22,10 @@ export const authAPI = {
     axios.post(`${API_BASE_URL}/auth/verify-app-lock`, { username, appLockPassword }),
 
   checkAppLock: (username) =>
-    axios.get(`${API_BASE_URL}/auth/check-app-lock`, { params: { username } })
+    axios.get(`${API_BASE_URL}/auth/check-app-lock`, { params: { username } }),
+
+  toggleAppLock: (username, enabled) =>
+    axios.post(`${API_BASE_URL}/auth/toggle-app-lock`, { username, enabled })
 };
 
 export const usersAPI = {
