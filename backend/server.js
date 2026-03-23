@@ -10,9 +10,14 @@ dotenv.config();
 // Initialize Express
 const app = express();
 const server = http.createServer(app);
+const allowedOriginsIO = [
+  'http://localhost:5173',      // Local development
+  process.env.FRONTEND_URL      // Deployed frontend
+].filter(Boolean);              // Remove undefined values
+
 const io = socketIO(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
+    origin: allowedOriginsIO,
     methods: ['GET', 'POST']
   }
 });
@@ -22,8 +27,13 @@ const connectDB = require('./config/database');
 connectDB();
 
 // Middleware
+const allowedOrigins = [
+  'http://localhost:5173',      // Local development
+  process.env.FRONTEND_URL      // Deployed frontend
+].filter(Boolean);              // Remove undefined values
+
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5173'
+  origin: allowedOrigins
 }));
 app.use(express.json());
 
