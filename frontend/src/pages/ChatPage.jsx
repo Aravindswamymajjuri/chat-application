@@ -2,15 +2,60 @@ import React, { useState, useEffect } from 'react';
 import Sidebar from '../components/Sidebar';
 import ChatWindow from '../components/ChatWindow';
 import MessageInput from '../components/MessageInput';
+import AppLockModal from '../components/AppLockModal';
+import Settings from '../components/Settings';
 import { authAPI, usersAPI } from '../utils/api';
 import { disconnectSocket, emitUserLogout, initializeSocket, emitUserJoin } from '../utils/socket';
 import { setupForegroundNotifications, requestFCMToken, registerServiceWorker } from '../utils/firebase';
+import { useAppSecurity, setAppLockSession, wasAppLocked } from '../utils/security';
 import '../styles/ChatPage.css';
 
 const ChatPage = ({ currentUser, onLogout }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [messages, setMessages] = useState([]);
   const [users, setUsers] = useState([]);
+  const [appLockModalOpen, setAppLockModalOpen] = useState(false);
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [hasAppLock, setHasAppLock] = useState(false);
+  const [replyingTo, setReplyingTo] = useState(null);
+
+  // Check if app lock is enabled
+  useEffect(() => {
+    const checkAppLock = async () => {
+      try {
+        const response = await authAPI.checkAppLock(currentUser.username);
+        const appLockEnabled = response.data?.hasAppLock === true;
+        setHasAppLock(appLockEnabled);
+        
+        console.log('🔍 App lock check result:', appLockEnabled);
+        
+        // Show modal if app lock is enabled and user wasn't already verified
+        if (appLockEnabled && wasAppLocked(currentUser.username)) {
+          console.log('🔒 Showing app lock modal');
+          setAppLockModalOpen(true);
+        } else if (appLockEnabled) {
+          // User was already verified in this session
+          console.log('✅ User already verified in this session');
+          setAppLockSession(currentUser.username);
+        }
+      } catch (error) {
+        console.error('⚠️  Error checking app lock (non-blocking):', error.message);
+        // Don't crash if app lock check fails - app can still work
+        setHasAppLock(false);
+      }
+    };
+
+    if (currentUser?.username) {
+      checkAppLock();
+    }
+  }, [currentUser.username]);
+
+  // Setup security listeners (tab switch, window focus, etc)
+  useAppSecurity(
+    currentUser.username,
+    hasAppLock,
+    () => setAppLockModalOpen(true)
+  );
 
   useEffect(() => {
     // Initialize Socket.IO when ChatPage loads (for page refreshes)
@@ -60,12 +105,29 @@ const ChatPage = ({ currentUser, onLogout }) => {
     }
   };
 
+  const handleAppLockUnlock = () => {
+    setAppLockSession(currentUser.username);
+    setAppLockModalOpen(false);
+  };
+
   const handleMessageSent = (message) => {
     setMessages((prev) => [...prev, message]);
   };
 
   return (
     <div className="chat-page">
+      <AppLockModal
+        username={currentUser.username}
+        onUnlock={handleAppLockUnlock}
+        isOpen={appLockModalOpen}
+      />
+
+      <Settings
+        currentUsername={currentUser.username}
+        isOpen={settingsModalOpen}
+        onClose={() => setSettingsModalOpen(false)}
+      />
+
       <Sidebar
         currentUser={currentUser}
         selectedUser={selectedUser}
@@ -80,6 +142,7 @@ const ChatPage = ({ currentUser, onLogout }) => {
           selectedUser={selectedUser}
           messages={messages}
           setMessages={setMessages}
+          onReply={(msg) => setReplyingTo(msg)}
         />
 
         {selectedUser && (
@@ -87,13 +150,20 @@ const ChatPage = ({ currentUser, onLogout }) => {
             currentUser={currentUser}
             selectedUser={selectedUser}
             onMessageSent={handleMessageSent}
+            replyingTo={replyingTo}
+            onReplyCancel={() => setReplyingTo(null)}
           />
         )}
       </div>
 
-      <button className="logout-btn" onClick={handleLogout}>
-        Logout
-      </button>
+      <div className="chat-actions">
+        <button className="settings-btn" onClick={() => setSettingsModalOpen(true)}>
+          ⚙️ Settings
+        </button>
+        <button className="logout-btn" onClick={handleLogout}>
+          Logout
+        </button>
+      </div>
     </div>
   );
 };

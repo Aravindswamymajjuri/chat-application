@@ -1,0 +1,65 @@
+.message-actions {
+  display: flex;
+  gap: 8px;
+  padding: 8px;
+  background: #f9f9f9;
+  border-radius: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  border: 1px solid #eee;
+}
+
+.action-btn {
+  padding: 6px 12px;
+  border: 1px solid #ddd;
+  background: white;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.action-btn:hover:not(:disabled) {
+  background: #e8e8e8;
+  border-color: #999;
+}
+
+.action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.reply-btn {
+  color: #4a90e2;
+  border-color: #4a90e2;
+}
+
+.reply-btn:hover:not(:disabled) {
+  background: #e3f2fd;
+}
+
+.delete-for-me-btn {
+  color: #ff9800;
+  border-color: #ff9800;
+}
+
+.delete-for-me-btn:hover:not(:disabled) {
+  background: #fff3e0;
+}
+
+.delete-all-btn {
+  color: #e74c3c;
+  border-color: #e74c3c;
+}
+
+.delete-all-btn:hover:not(:disabled) {
+  background: #ffe6e6;
+}
+
+.action-error {
+  width: 100%;
+  color: #e74c3c;
+  font-size: 12px;
+  text-align: center;
+}

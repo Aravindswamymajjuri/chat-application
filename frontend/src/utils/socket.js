@@ -37,9 +37,24 @@ export const emitUserJoin = (username) => {
   socket.emit('user_join', { username });
 };
 
-export const emitSendMessage = (sender, receiver, text) => {
+export const emitSendMessage = (sender, receiver, text, replyTo = null, messageData = null) => {
   const socket = getSocket();
-  socket.emit('send_message', { sender, receiver, text });
+  // If we have the full saved message, emit that instead (includes _id)
+  if (messageData) {
+    socket.emit('send_message', messageData);
+  } else {
+    socket.emit('send_message', { sender, receiver, text, replyTo });
+  }
+};
+
+export const emitDeleteMessage = (messageId) => {
+  const socket = getSocket();
+  socket.emit('delete_message', { messageId });
+};
+
+export const emitDeleteMessageForMe = (messageId, username) => {
+  const socket = getSocket();
+  socket.emit('delete_message_for_me', { messageId, username });
 };
 
 export const emitTyping = (username, receiver) => {
@@ -85,6 +100,16 @@ export const onTypingIndicator = (callback) => {
 export const onStopTyping = (callback) => {
   const socket = getSocket();
   socket.on('stop_typing', callback);
+};
+
+export const onDeleteMessage = (callback) => {
+  const socket = getSocket();
+  socket.on('message_deleted', callback);
+};
+
+export const onDeleteMessageForMe = (callback) => {
+  const socket = getSocket();
+  socket.on('message_deleted_for_me', callback);
 };
 
 export const disconnectSocket = () => {

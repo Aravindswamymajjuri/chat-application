@@ -1,10 +1,12 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { chatAPI } from '../utils/api';
-import { onReceiveMessage } from '../utils/socket';
+import { onReceiveMessage, onDeleteMessage, onDeleteMessageForMe } from '../utils/socket';
+import MessageActions from './MessageActions';
 import '../styles/ChatWindow.css';
 
-const ChatWindow = ({ currentUser, selectedUser, messages, setMessages }) => {
+const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply }) => {
   const [loading, setLoading] = useState(false);
+  const [activeMessageId, setActiveMessageId] = useState(null);
   const messagesEndRef = useRef(null);
 
   useEffect(() => {
@@ -56,6 +58,32 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages }) => {
   }, [selectedUser, currentUser.username, setMessages]);
 
   useEffect(() => {
+    // Subscribe to message deletion events (for everyone)
+    const unsubscribe = onDeleteMessage((data) => {
+      console.log('🗑️ Message deleted:', data.messageId);
+      setMessages((prev) => prev.filter((msg) => msg._id !== data.messageId));
+    });
+
+    return unsubscribe;
+  }, [setMessages]);
+
+  useEffect(() => {
+    // Subscribe to message deletion for me only
+    const unsubscribe = onDeleteMessageForMe((data) => {
+      console.log('🗑️ Message deleted for me:', data.messageId);
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === data.messageId && data.username !== currentUser.username
+            ? { ...msg, text: '[Deleted message]', deletedForMe: true }
+            : msg
+        )
+      );
+    });
+
+    return unsubscribe;
+  }, [setMessages, currentUser.username]);
+
+  useEffect(() => {
     // Auto-scroll to bottom
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -69,6 +97,30 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages }) => {
       console.error('Error fetching messages:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteMessage = (messageId, forMeOnly = false) => {
+    if (forMeOnly) {
+      // For "delete for me", show as deleted but keep in array
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg._id === messageId ? { ...msg, text: '[Deleted message]', deletedForMe: true } : msg
+        )
+      );
+    } else {
+      // For "delete for everyone", remove completely
+      setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+    }
+  };
+
+  const handleReplyClick = (message) => {
+    if (onReply) {
+      onReply({
+        id: message._id,
+        text: message.text,
+        sender: message.sender
+      });
     }
   };
 
@@ -99,9 +151,19 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages }) => {
         ) : (
           messages.map((msg, index) => (
             <div
-              key={index}
-              className={`message ${msg.sender === currentUser.username ? 'sent' : 'received'}`}
+              key={msg._id || index}
+              className={`message ${msg.sender === currentUser.username ? 'sent' : 'received'} ${
+                msg.deletedForMe ? 'deleted' : ''
+              }`}
+              onMouseEnter={() => setActiveMessageId(msg._id)}
+              onMouseLeave={() => setActiveMessageId(null)}
             >
+              {msg.replyTo && (
+                <div className="message-reply-quote">
+                  <div className="reply-quote-sender">↩️ {msg.replyTo.sender}</div>
+                  <div className="reply-quote-text">{msg.replyTo.text}</div>
+                </div>
+              )}
               <div className="message-content">{msg.text}</div>
               <div className="message-time">
                 {new Date(msg.timestamp).toLocaleTimeString([], {
@@ -109,6 +171,18 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages }) => {
                   minute: '2-digit'
                 })}
               </div>
+
+              {activeMessageId === msg._id && !msg.deletedForMe && (
+                <MessageActions
+                  messageId={msg._id}
+                  message={msg}
+                  currentUsername={currentUser.username}
+                  isOwnMessage={msg.sender === currentUser.username}
+                  onDelete={handleDeleteMessage}
+                  onReply={handleReplyClick}
+                  onClose={() => setActiveMessageId(null)}
+                />
+              )}
             </div>
           ))
         )}

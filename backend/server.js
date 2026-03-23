@@ -68,11 +68,31 @@ io.on('connection', (socket) => {
     
     // Emit to all OTHER clients (not back to sender)
     // Sender already added message locally via onMessageSent callback
-    socket.broadcast.emit('receive_message', {
+    // If data has _id (full saved message), emit it as-is; otherwise construct a new object
+    const messageToSend = data._id ? data : {
       sender: data.sender,
       receiver: data.receiver,
       text: data.text,
+      replyTo: data.replyTo || null,
       timestamp: new Date()
+    };
+    socket.broadcast.emit('receive_message', messageToSend);
+  });
+
+  // Delete message for everyone
+  socket.on('delete_message', (data) => {
+    console.log(`Message ${data.messageId} deleted by user`);
+    socket.broadcast.emit('message_deleted', {
+      messageId: data.messageId
+    });
+  });
+
+  // Delete message for me only
+  socket.on('delete_message_for_me', (data) => {
+    console.log(`Message ${data.messageId} deleted for ${data.username}`);
+    socket.broadcast.emit('message_deleted_for_me', {
+      messageId: data.messageId,
+      username: data.username
     });
   });
 

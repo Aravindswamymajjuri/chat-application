@@ -117,3 +117,87 @@ exports.updateFCMToken = async (req, res) => {
     res.status(500).json({ message: 'FCM update error', error: error.message });
   }
 };
+
+// Set or update app lock password
+exports.setAppLockPassword = async (req, res) => {
+  try {
+    const { username, appLockPassword } = req.body;
+
+    if (!username || !appLockPassword) {
+      return res.status(400).json({ message: 'username and appLockPassword required' });
+    }
+
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // In production, hash the password with bcrypt!
+    user.appLockPassword = appLockPassword;
+    user.hasAppLock = true;
+    await user.save();
+
+    res.status(200).json({ message: 'App lock password set successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error setting app lock', error: error.message });
+  }
+};
+
+// Verify app lock password
+exports.verifyAppLockPassword = async (req, res) => {
+  try {
+    const { username, appLockPassword } = req.body;
+
+    if (!username || !appLockPassword) {
+      return res.status(400).json({ message: 'username and appLockPassword required' });
+    }
+
+    const user = await User.findOne({ username });
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+
+    if (!user.hasAppLock) {
+      return res.status(400).json({ message: 'App lock not enabled' });
+    }
+
+    // In production, use bcrypt.compare()!
+    if (user.appLockPassword !== appLockPassword) {
+      return res.status(401).json({ message: 'Incorrect password' });
+    }
+
+    res.status(200).json({ message: 'Password verified successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error verifying password', error: error.message });
+  }
+};
+
+// Check if user has app lock enabled
+exports.checkAppLock = async (req, res) => {
+  try {
+    const { username } = req.query;
+
+    if (!username) {
+      return res.status(400).json({ message: 'username required' });
+    }
+
+    console.log('🔍 Checking app lock for user:', username);
+
+    const user = await User.findOne({ username });
+    if (!user) {
+      console.log('❌ User not found:', username);
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Safely check hasAppLock - default to false if field doesn't exist
+    const hasAppLock = user.hasAppLock === true;
+    console.log('✅ App lock status for', username, ':', hasAppLock);
+
+    res.status(200).json({ 
+      hasAppLock: hasAppLock
+    });
+  } catch (error) {
+    console.error('💥 Error checking app lock:', error.message);
+    res.status(500).json({ message: 'Error checking app lock', error: error.message });
+  }
+};

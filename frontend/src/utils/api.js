@@ -13,7 +13,16 @@ export const authAPI = {
     axios.post(`${API_BASE_URL}/auth/logout`, { userId }),
 
   updateFCMToken: (userId, fcmToken) =>
-    axios.post(`${API_BASE_URL}/auth/update-fcm-token`, { userId, fcmToken })
+    axios.post(`${API_BASE_URL}/auth/update-fcm-token`, { userId, fcmToken }),
+
+  setAppLockPassword: (username, appLockPassword) =>
+    axios.post(`${API_BASE_URL}/auth/set-app-lock`, { username, appLockPassword }),
+
+  verifyAppLockPassword: (username, appLockPassword) =>
+    axios.post(`${API_BASE_URL}/auth/verify-app-lock`, { username, appLockPassword }),
+
+  checkAppLock: (username) =>
+    axios.get(`${API_BASE_URL}/auth/check-app-lock`, { params: { username } })
 };
 
 export const usersAPI = {
@@ -31,8 +40,14 @@ export const chatAPI = {
   getMessages: (sender, receiver) =>
     axios.get(`${API_BASE_URL}/chat/messages`, { params: { sender, receiver } }),
 
-  saveMessage: (sender, receiver, text) =>
-    axios.post(`${API_BASE_URL}/chat/messages`, { sender, receiver, text })
+  saveMessage: (sender, receiver, text, replyTo = null) =>
+    axios.post(`${API_BASE_URL}/chat/messages`, { sender, receiver, text, replyTo }),
+
+  deleteMessage: (messageId) =>
+    axios.delete(`${API_BASE_URL}/chat/messages/${messageId}`),
+
+  deleteMessageForMe: (messageId, username) =>
+    axios.post(`${API_BASE_URL}/chat/messages/delete-for-me`, { messageId, username })
 };
 
 export const notificationAPI = {

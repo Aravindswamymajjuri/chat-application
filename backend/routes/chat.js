@@ -4,5 +4,7 @@ const chatController = require('../controllers/chatController');
 
 router.get('/messages', chatController.getMessages);
 router.post('/messages', chatController.saveMessage);
+router.post('/messages/delete-for-me', chatController.deleteMessageForMe);
+router.delete('/messages/:messageId', chatController.deleteMessage);
 
 module.exports = router;

@@ -20,6 +20,15 @@ const messageSchema = new mongoose.Schema({
   isRead: {
     type: Boolean,
     default: false
+  },
+  deletedFor: {
+    type: [String],
+    default: []
+  },
+  replyTo: {
+    messageId: mongoose.Schema.Types.ObjectId,
+    text: String,
+    sender: String
   }
 });
 

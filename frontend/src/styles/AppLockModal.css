@@ -1,0 +1,104 @@
+.app-lock-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+.app-lock-modal {
+  background: white;
+  border-radius: 12px;
+  padding: 40px;
+  width: 90%;
+  max-width: 400px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.app-lock-header {
+  text-align: center;
+  margin-bottom: 30px;
+}
+
+.app-lock-header h2 {
+  margin: 0 0 10px 0;
+  color: #333;
+  font-size: 24px;
+}
+
+.app-lock-header p {
+  margin: 0;
+  color: #666;
+  font-size: 14px;
+}
+
+.app-lock-form {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.app-lock-form input {
+  padding: 12px;
+  border: 2px solid #ddd;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.3s;
+}
+
+.app-lock-form input:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+.app-lock-form input:disabled {
+  background: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.error-message {
+  color: #e74c3c;
+  font-size: 14px;
+  text-align: center;
+  padding: 10px;
+  background: #ffe6e6;
+  border-radius: 6px;
+}
+
+.app-lock-form button {
+  padding: 12px;
+  background: #4a90e2;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+.app-lock-form button:hover:not(:disabled) {
+  background: #357abd;
+}
+
+.app-lock-form button:disabled {
+  background: #bbb;
+  cursor: not-allowed;
+}

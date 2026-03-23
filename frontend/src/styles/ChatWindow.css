@@ -98,3 +98,84 @@
 .message.sent .message-time {
   text-align: right;
 }
+
+.message.deleted .message-content {
+  font-style: italic;
+  opacity: 0.6;
+}
+
+.message-reply-quote {
+  padding: 12px 14px;
+  background: #f0f0f0;
+  border-left: 4px solid #667eea;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  margin-right: 0;
+  margin-left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  border-top: 2px solid #667eea;
+}
+
+.message.sent .message-reply-quote {
+  background: rgba(255, 255, 255, 0.5);
+  border-left: 4px solid rgba(255, 255, 255, 1);
+  border-top: 2px solid rgba(255, 255, 255, 1);
+}
+
+.reply-quote-sender {
+  font-size: 12px;
+  font-weight: 800;
+  color: #333;
+  margin-bottom: 2px;
+  letter-spacing: 0.3px;
+}
+
+.message.sent .reply-quote-sender {
+  color: black;
+  font-weight: 900;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.reply-quote-text {
+  font-size: 13px;
+  color: #333;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.message.sent .reply-quote-text {
+  color: black;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.reply-quote-text {
+  font-size: 13px;
+  color: #555;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.message.sent .reply-quote-text {
+  color: black;
+}
+
+.message:hover .message-actions {
+  display: flex;
+}
+
+/* Status indicators */
+.user-status.online {
+  color: #27ae60;
+  font-weight: 600;
+}
+
+.user-status.offline {
+  color: #e74c3c;
+}
+
