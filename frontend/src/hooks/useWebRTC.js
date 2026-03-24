@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { getSocket } from '../utils/socket';
+import { callAPI } from '../utils/api';
 
 const STUN_SERVERS = [
   'stun:stun.l.google.com:19302',
@@ -11,11 +12,20 @@ export const useWebRTC = (currentUser, remoteUser) => {
   const [callStatus, setCallStatus] = useState(null); // null, 'calling', 'ringing', 'connected', 'ended'
   const [incomingCall, setIncomingCall] = useState(false);
   const [incomingCaller, setIncomingCaller] = useState(null);
+  const [callDuration, setCallDuration] = useState(0); // in seconds
+  const [isMuted, setIsMuted] = useState(false);
+  const [speakerEnabled, setSpeakerEnabled] = useState(true);
+  const [networkQuality, setNetworkQuality] = useState('good'); // excellent, good, fair, poor
+  const [networkWarning, setNetworkWarning] = useState(null);
 
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const iceCandidatesRef = useRef([]);
+  const callStartTimeRef = useRef(null);
+  const timerIntervalRef = useRef(null);
+  const statsIntervalRef = useRef(null);
+  const networkWarningTimeoutRef = useRef(null);
 
   // Initialize RTCPeerConnection
   const createPeerConnection = useCallback(() => {
@@ -267,6 +277,159 @@ export const useWebRTC = (currentUser, remoteUser) => {
     }
   }, []);
 
+  // Mute/unmute local audio
+  const toggleMute = useCallback(() => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => {
+        if (track.kind === 'audio') {
+          track.enabled = !track.enabled;
+          console.log(`🔇 Audio ${track.enabled ? 'unmuted' : 'muted'}`);
+        }
+      });
+      setIsMuted(!isMuted);
+    }
+  }, [isMuted]);
+
+  // Toggle speaker
+  const toggleSpeaker = useCallback(() => {
+    if (remoteAudioRef.current) {
+      const newSpeakerState = !speakerEnabled;
+      remoteAudioRef.current.muted = !newSpeakerState;
+      remoteAudioRef.current.volume = newSpeakerState ? 1.0 : 0;
+      setSpeakerEnabled(newSpeakerState);
+      console.log(`🔊 Speaker ${newSpeakerState ? 'on' : 'off'}`);
+    }
+  }, [speakerEnabled]);
+
+  // Monitor network quality using RTCPeerConnection stats
+  const monitorNetworkQuality = useCallback(() => {
+    const peerConnection = peerConnectionRef.current;
+    if (!peerConnection) return;
+
+    peerConnection.getStats().then((stats) => {
+      let inboundRtpStats = null;
+      let roundTripTime = null;
+      let packetsLost = 0;
+      let bytesSent = 0;
+
+      stats.forEach((report) => {
+        if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+          inboundRtpStats = report;
+        } else if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+          roundTripTime = report.currentRoundTripTime || 0;
+        }
+      });
+
+      if (inboundRtpStats) {
+        packetsLost = inboundRtpStats.packetsLost || 0;
+        
+        // Calculate packet loss percentage
+        const totalPackets = inboundRtpStats.packetsReceived + packetsLost;
+        const packetLossPercent = totalPackets > 0 ? (packetsLost / totalPackets) * 100 : 0;
+        
+        // Determine network quality based on RTT and packet loss
+        let quality = 'excellent';
+        let warning = null;
+
+        if (packetLossPercent > 5 || roundTripTime > 300) {
+          quality = 'poor';
+          warning = '⚠️ Poor network connection - audio may be affected';
+        } else if (packetLossPercent > 2 || roundTripTime > 150) {
+          quality = 'fair';
+          warning = '⚠️ Network quality is fair';
+        } else if (packetLossPercent > 1 || roundTripTime > 100) {
+          quality = 'good';
+        }
+
+        setNetworkQuality(quality);
+        
+        // Show warning but don't disconnect
+        if (warning && !networkWarning) {
+          setNetworkWarning(warning);
+          clearTimeout(networkWarningTimeoutRef.current);
+          networkWarningTimeoutRef.current = setTimeout(() => {
+            setNetworkWarning(null);
+          }, 5000); // Hide warning after 5 seconds
+        }
+
+        console.log(`📊 Network Quality: ${quality} (RTT: ${roundTripTime?.toFixed(0)}ms, Loss: ${packetLossPercent.toFixed(1)}%)`);
+      }
+    });
+  }, [networkWarning]);
+
+  // Start call timer
+  const startCallTimer = useCallback(() => {
+    callStartTimeRef.current = Date.now();
+    setCallDuration(0);
+    
+    timerIntervalRef.current = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - callStartTimeRef.current) / 1000);
+      setCallDuration(elapsed);
+    }, 1000);
+
+    // Start monitoring network quality
+    monitorNetworkQuality(); // First check immediately
+    statsIntervalRef.current = setInterval(monitorNetworkQuality, 2000); // Then every 2 seconds
+  }, [monitorNetworkQuality]);
+
+  // Stop call timer
+  const stopCallTimer = useCallback(() => {
+    if (timerIntervalRef.current) {
+      clearInterval(timerIntervalRef.current);
+    }
+    if (statsIntervalRef.current) {
+      clearInterval(statsIntervalRef.current);
+    }
+    if (networkWarningTimeoutRef.current) {
+      clearTimeout(networkWarningTimeoutRef.current);
+    }
+  }, []);
+
+  // Save call to history
+  const saveCallHistory = useCallback(async (status = 'completed') => {
+    try {
+      const duration = callDuration;
+      console.log(`💾 Saving call: ${currentUser} → ${remoteUser} (${duration}s, ${networkQuality})`);
+      
+      await callAPI.saveCall(
+        currentUser,
+        remoteUser,
+        duration,
+        status,
+        networkQuality
+      );
+      
+      console.log('✅ Call saved to history');
+    } catch (error) {
+      console.error('❌ Error saving call history:', error);
+    }
+  }, [callDuration, networkQuality, currentUser, remoteUser]);
+
+  // Cleanup resources (defined before functions that use it)
+  const cleanup = useCallback(() => {
+    // Stop timers
+    stopCallTimer();
+
+    // Close peer connection
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+
+    // Stop local stream
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach((track) => track.stop());
+      localStreamRef.current = null;
+    }
+
+    // Clear remote audio
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.srcObject = null;
+    }
+
+    iceCandidatesRef.current = [];
+  }, [stopCallTimer]);
+
   // Start call
   const startCall = useCallback(async () => {
     try {
@@ -313,6 +476,7 @@ export const useWebRTC = (currentUser, remoteUser) => {
       console.log(`   Signaling state: ${peerConnection.signalingState}`);
 
       setCallStatus('connected');
+      startCallTimer(); // Start timer when call is accepted
 
       getSocket().emit('answer-call', {
         to: incomingCaller,
@@ -326,7 +490,7 @@ export const useWebRTC = (currentUser, remoteUser) => {
       console.error('   Error message:', error.message);
       setCallStatus('ended');
     }
-  }, [createAnswer, incomingCaller, currentUser]);
+  }, [createAnswer, incomingCaller, currentUser, startCallTimer]);
 
   // Reject call
   const rejectCall = useCallback(() => {
@@ -348,6 +512,9 @@ export const useWebRTC = (currentUser, remoteUser) => {
     setCallStatus('ended');
     setIncomingCall(false);
 
+    stopCallTimer(); // Stop timer and network monitoring
+    saveCallHistory('completed'); // Save call to history
+
     getSocket().emit('end-call', {
       to: remoteUser,
       from: currentUser
@@ -358,42 +525,26 @@ export const useWebRTC = (currentUser, remoteUser) => {
     // Reset after a delay
     setTimeout(() => {
       setCallStatus(null);
+      setCallDuration(0);
+      setNetworkWarning(null);
     }, 1000);
-  }, [remoteUser, currentUser]);
+  }, [remoteUser, currentUser, stopCallTimer, saveCallHistory, cleanup]);
 
   // Handle remote end call (don't re-emit)
   const handleRemoteEndCall = useCallback(() => {
     setCallStatus('ended');
     setIncomingCall(false);
+    stopCallTimer(); // Stop timer
+    saveCallHistory('completed'); // Save call to history
     cleanup();
 
     // Reset after a delay
     setTimeout(() => {
       setCallStatus(null);
+      setCallDuration(0);
+      setNetworkWarning(null);
     }, 1000);
-  }, []);
-
-  // Cleanup resources
-  const cleanup = useCallback(() => {
-    // Close peer connection
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-
-    // Stop local stream
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-    }
-
-    // Clear remote audio
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.srcObject = null;
-    }
-
-    iceCandidatesRef.current = [];
-  }, []);
+  }, [stopCallTimer, saveCallHistory, cleanup]);
 
   // Debug helper to diagnose audio issues
   const getAudioDebugInfo = useCallback(() => {
@@ -457,6 +608,14 @@ export const useWebRTC = (currentUser, remoteUser) => {
     handleAnswer,
     handleIceCandidate,
     cleanup,
-    getAudioDebugInfo
+    getAudioDebugInfo,
+    // New features
+    callDuration,
+    isMuted,
+    speakerEnabled,
+    networkQuality,
+    networkWarning,
+    toggleMute,
+    toggleSpeaker
   };
 };

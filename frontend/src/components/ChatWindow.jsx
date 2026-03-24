@@ -7,14 +7,15 @@ import {
 import MessageActions from './MessageActions';
 import CallScreen from './CallScreen';
 import IncomingCallPopup from './IncomingCallPopup';
+import CallHistory from './CallHistory';
 import { useWebRTC } from '../hooks/useWebRTC';
 import '../styles/ChatWindow.css';
 
 const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply }) => {
   const [loading, setLoading] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState(null);
+  const [showCallHistory, setShowCallHistory] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
   const messagesEndRef = useRef(null);
 
   // WebRTC Hook
@@ -31,7 +32,14 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
     handleOffer,
     handleAnswer,
     handleIceCandidate,
-    cleanup
+    cleanup,
+    callDuration,
+    isMuted,
+    speakerEnabled,
+    networkQuality,
+    networkWarning,
+    toggleMute,
+    toggleSpeaker
   } = useWebRTC(currentUser.username, selectedUser?.username);
 
   useEffect(() => {
@@ -263,6 +271,12 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
         onEndCall={endCall}
         remoteAudioRef={remoteAudioRef}
         isMuted={isMuted}
+        callDuration={callDuration}
+        networkQuality={networkQuality}
+        networkWarning={networkWarning}
+        onToggleMute={toggleMute}
+        onToggleSpeaker={toggleSpeaker}
+        speakerEnabled={speakerEnabled}
       />}
 
       {/* Incoming Call Popup */}
@@ -288,17 +302,27 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
             </div>
           )}
         </div>
-        <button 
-          className="call-btn" 
-          onClick={handleStartCall} 
-          disabled={!selectedUser.isOnline || callStatus} 
-          title={callStatus ? `${callStatus}...` : 'Call user'}
-        >
-          📞
-        </button>
+        <div className="header-actions">
+          <button 
+            className={`history-btn ${showCallHistory ? 'active' : ''}`}
+            onClick={() => setShowCallHistory(!showCallHistory)}
+            title="View call history"
+          >
+            📞 History
+          </button>
+          <button 
+            className="call-btn" 
+            onClick={handleStartCall} 
+            disabled={!selectedUser.isOnline || callStatus} 
+            title={callStatus ? `${callStatus}...` : 'Call user'}
+          >
+            📞
+          </button>
+        </div>
       </div>
 
-      <div className="messages-container">
+      <div className="chat-content-wrapper">
+        <div className="messages-container">
         {loading ? (
           <div className="loading">Loading messages...</div>
         ) : messages.length === 0 ? (
@@ -358,6 +382,15 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
           </>
         )}
         <div ref={messagesEndRef} />
+      </div>
+
+        {/* Call History Sidebar */}
+        {showCallHistory && (
+          <CallHistory 
+            currentUser={currentUser} 
+            selectedUser={selectedUser}
+          />
+        )}
       </div>
     </div>
   );

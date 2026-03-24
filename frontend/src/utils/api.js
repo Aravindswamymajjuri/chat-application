@@ -64,3 +64,26 @@ export const notificationAPI = {
       messageText
     })
 };
+
+export const callAPI = {
+  saveCall: (callerId, receiverId, duration, status = 'completed', networkQuality = 'good') =>
+    axios.post(`${API_BASE_URL}/calls/save`, { 
+      callerId, 
+      receiverId, 
+      duration, 
+      status,
+      networkQuality
+    }),
+
+  getCallHistory: (username, limit = 50) =>
+    axios.get(`${API_BASE_URL}/calls/user/${username}`, { params: { limit } }),
+
+  getCallHistoryWith: (username, otherUsername, limit = 50) =>
+    axios.get(`${API_BASE_URL}/calls/between/${username}/${otherUsername}`, { params: { limit } }),
+
+  deleteCall: (callId) =>
+    axios.delete(`${API_BASE_URL}/calls/${callId}`),
+
+  clearCallHistory: (username) =>
+    axios.delete(`${API_BASE_URL}/calls/user/${username}/clear`)
+};

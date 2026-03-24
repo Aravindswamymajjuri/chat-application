@@ -1,0 +1,221 @@
+/* Call History Styles */
+.call-history {
+  background: white;
+  border-left: 1px solid #e5e7eb;
+  padding: 20px;
+  max-width: 350px;
+  height: 100%;
+  overflow-y: auto;
+  animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.call-history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  border-bottom: 2px solid #f3f4f6;
+  padding-bottom: 15px;
+}
+
+.call-history-header h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #1f2937;
+}
+
+.clear-history-btn {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.clear-history-btn:hover:not(:disabled) {
+  background: #dc2626;
+  transform: scale(1.05);
+}
+
+.clear-history-btn:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* Filter Tabs */
+.call-history-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+}
+
+.filter-btn {
+  padding: 8px 12px;
+  border: 1px solid #d1d5db;
+  background: white;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+  color: #6b7280;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+.filter-btn:hover {
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.filter-btn.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+/* Call History List */
+.call-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.call-history-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  transition: all 0.3s ease;
+}
+
+.call-history-item:hover {
+  background: #f3f4f6;
+  border-color: #d1d5db;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.call-item-icon {
+  font-size: 20px;
+  min-width: 24px;
+  text-align: center;
+}
+
+.call-item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.call-item-user {
+  font-weight: 600;
+  color: #1f2937;
+  font-size: 13px;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.call-item-details {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+
+.call-duration {
+  color: #6b7280;
+  background: white;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.call-network-quality {
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.call-item-time {
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.delete-call-btn {
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: all 0.3s ease;
+  min-width: 28px;
+  text-align: center;
+}
+
+.delete-call-btn:hover {
+  background: #fee2e2;
+  color: #ef4444;
+}
+
+/* Empty State */
+.call-history-loading,
+.call-history-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #9ca3af;
+  font-size: 13px;
+}
+
+.call-history-loading {
+  animation: pulse 1.5s infinite;
+}
+
+/* Scrollbar Styling */
+.call-history::-webkit-scrollbar {
+  width: 6px;
+}
+
+.call-history::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 3px;
+}
+
+.call-history::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 3px;
+}
+
+.call-history::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .call-history {
+    max-width: 100%;
+    border-left: none;
+    border-top: 1px solid #e5e7eb;
+  }
+}

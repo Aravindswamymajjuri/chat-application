@@ -48,6 +48,7 @@ const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
 const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notification');
+const callHistoryRoutes = require('./routes/callHistory');
 const chatController = require('./controllers/chatController');
 
 // Track connected users: { username: socketId }
@@ -60,6 +61,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/calls', callHistoryRoutes);
 
 // Basic route
 app.get('/', (req, res) => {
