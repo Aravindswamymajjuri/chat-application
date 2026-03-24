@@ -211,6 +211,50 @@
   text-align: right;
 }
 
+.typing-message {
+  padding: 8px 8px;
+  cursor: default;
+}
+
+.typing-dots {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 50px;
+}
+
+.typing-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #999;
+  animation: typingBounce 1.4s infinite;
+}
+
+.typing-dots span:nth-child(1) {
+  animation-delay: 0s;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% {
+    opacity: 0.5;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-10px);
+  }
+}
+
 .message.deleted .message-content {
   font-style: italic;
   opacity: 0.6;

@@ -197,46 +197,58 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
         ) : messages.length === 0 ? (
           <div className="no-messages">No messages yet. Start the conversation!</div>
         ) : (
-          messages.map((msg, index) => (
-            <div
-              key={msg._id || index}
-              className={`message ${msg.sender === currentUser.username ? 'sent' : 'received'} ${
-                msg.deletedForMe ? 'deleted' : ''
-              }`}
-              onClick={() => setActiveMessageId(activeMessageId === msg._id ? null : msg._id)}
-            >
-              {msg.replyTo && (
-                <div className="message-reply-quote">
-                  <div className="reply-quote-sender">↩️ {msg.replyTo.sender}</div>
-                  <div className="reply-quote-text">{msg.replyTo.text}</div>
+          <>
+            {messages.map((msg, index) => (
+              <div
+                key={msg._id || index}
+                className={`message ${msg.sender === currentUser.username ? 'sent' : 'received'} ${
+                  msg.deletedForMe ? 'deleted' : ''
+                }`}
+                onClick={() => setActiveMessageId(activeMessageId === msg._id ? null : msg._id)}
+              >
+                {msg.replyTo && (
+                  <div className="message-reply-quote">
+                    <div className="reply-quote-sender">↩️ {msg.replyTo.sender}</div>
+                    <div className="reply-quote-text">{msg.replyTo.text}</div>
+                  </div>
+                )}
+                <div className="message-content">{msg.text}</div>
+                <div className="message-time">
+                  {new Date(msg.timestamp).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}
+                  {msg.sender === currentUser.username && (
+                    <span className={`read-status ${msg.isRead ? 'read' : 'delivered'}`}>
+                      {msg.isRead ? '✓✓' : '✓'}
+                    </span>
+                  )}
                 </div>
-              )}
-              <div className="message-content">{msg.text}</div>
-              <div className="message-time">
-                {new Date(msg.timestamp).toLocaleTimeString([], {
-                  hour: '2-digit',
-                  minute: '2-digit'
-                })}
-                {msg.sender === currentUser.username && (
-                  <span className={`read-status ${msg.isRead ? 'read' : 'delivered'}`}>
-                    {msg.isRead ? '✓✓' : '✓'}
-                  </span>
+
+                {activeMessageId === msg._id && !msg.deletedForMe && (
+                  <MessageActions
+                    messageId={msg._id}
+                    message={msg}
+                    currentUsername={currentUser.username}
+                    isOwnMessage={msg.sender === currentUser.username}
+                    onDelete={handleDeleteMessage}
+                    onReply={handleReplyClick}
+                    onClose={() => setActiveMessageId(null)}
+                  />
                 )}
               </div>
+            ))}
 
-              {activeMessageId === msg._id && !msg.deletedForMe && (
-                <MessageActions
-                  messageId={msg._id}
-                  message={msg}
-                  currentUsername={currentUser.username}
-                  isOwnMessage={msg.sender === currentUser.username}
-                  onDelete={handleDeleteMessage}
-                  onReply={handleReplyClick}
-                  onClose={() => setActiveMessageId(null)}
-                />
-              )}
-            </div>
-          ))
+            {isTyping && (
+              <div className="message received typing-message">
+                <div className="message-content typing-dots">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            )}
+          </>
         )}
         <div ref={messagesEndRef} />
       </div>
