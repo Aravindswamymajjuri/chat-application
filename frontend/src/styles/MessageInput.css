@@ -54,3 +54,59 @@
   background: #999;
   cursor: not-allowed;
 }
+
+/* Responsive Styles */
+@media (max-width: 768px) {
+  .message-input-wrapper {
+    border-top: 1px solid #ddd;
+  }
+
+  .message-input {
+    gap: 8px;
+    padding: 12px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .message-input input {
+    flex: 1;
+    padding: 10px;
+    font-size: 13px;
+    min-width: 0;
+  }
+
+  .message-input button {
+    padding: 10px 16px;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 480px) {
+  .message-input-wrapper {
+    border-top: 1px solid #ddd;
+  }
+
+  .message-input {
+    gap: 6px;
+    padding: 10px;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+  }
+
+  .message-input input {
+    flex: 1;
+    padding: 8px;
+    font-size: 12px;
+    min-width: 0;
+  }
+
+  .message-input button {
+    padding: 8px 12px;
+    font-size: 12px;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+}

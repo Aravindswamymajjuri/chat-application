@@ -18,6 +18,7 @@ const ChatPage = ({ currentUser, onLogout }) => {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [hasAppLock, setHasAppLock] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
 
   // Check if app lock is enabled
   useEffect(() => {
@@ -145,45 +146,58 @@ const ChatPage = ({ currentUser, onLogout }) => {
         onAppLockChange={(enabled) => setHasAppLock(enabled)}
       />
 
-      <Sidebar
-        currentUser={currentUser}
-        selectedUser={selectedUser}
-        onSelectUser={setSelectedUser}
-        users={users}
-        setUsers={setUsers}
-        hasAppLock={hasAppLock}
-        onToggleAppLock={handleToggleAppLock}
-        onSettings={() => setSettingsModalOpen(true)}
-        onLogout={handleLogout}
-      />
-
-      <div className="chat-main">
-        <ChatWindow
-          currentUser={currentUser}
-          selectedUser={selectedUser}
-          messages={messages}
-          setMessages={setMessages}
-          onReply={(msg) => setReplyingTo(msg)}
-        />
-
-        {selectedUser && (
-          <MessageInput
-            currentUser={currentUser}
-            selectedUser={selectedUser}
-            onMessageSent={handleMessageSent}
-            replyingTo={replyingTo}
-            onReplyCancel={() => setReplyingTo(null)}
-          />
-        )}
+      {/* Fixed Header */}
+      <div className="app-header">
+        <div className="header-left">
+          <button 
+            className="hamburger-btn" 
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            title="Toggle sidebar"
+          >
+            ☰
+          </button>
+          <span className="current-username">👤 {currentUser.username}</span>
+          <div className="user-status-indicator online"></div>
+        </div>
+        <div className="header-right">
+          <button className="header-settings-btn" onClick={() => setSettingsModalOpen(true)} title="Settings">
+            ⚙️
+          </button>
+          <button className="header-logout-btn" onClick={handleLogout} title="Logout">
+            🚪
+          </button>
+        </div>
       </div>
 
-      <div className="chat-actions">
-        <button className="settings-btn" onClick={() => setSettingsModalOpen(true)}>
-          ⚙️ Settings
-        </button>
-        <button className="logout-btn" onClick={handleLogout}>
-          Logout
-        </button>
+      {/* Main Content */}
+      <div className={`chat-container ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
+        <Sidebar
+          currentUser={currentUser}
+          selectedUser={selectedUser}
+          onSelectUser={setSelectedUser}
+          users={users}
+          setUsers={setUsers}
+        />
+
+        <div className="chat-main">
+          <ChatWindow
+            currentUser={currentUser}
+            selectedUser={selectedUser}
+            messages={messages}
+            setMessages={setMessages}
+            onReply={(msg) => setReplyingTo(msg)}
+          />
+
+          {selectedUser && (
+            <MessageInput
+              currentUser={currentUser}
+              selectedUser={selectedUser}
+              onMessageSent={handleMessageSent}
+              replyingTo={replyingTo}
+              onReplyCancel={() => setReplyingTo(null)}
+            />
+          )}
+        </div>
       </div>
     </div>
   );
