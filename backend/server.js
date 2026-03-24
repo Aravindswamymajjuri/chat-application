@@ -48,6 +48,13 @@ const authRoutes = require('./routes/auth');
 const usersRoutes = require('./routes/users');
 const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notification');
+const chatController = require('./controllers/chatController');
+
+// Track connected users: { username: socketId }
+const connectedUsers = {};
+
+// Initialize chat controller with io instance and connectedUsers map for real-time updates
+chatController.setIO(io, connectedUsers);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -65,9 +72,13 @@ io.on('connection', (socket) => {
 
   // When user joins
   socket.on('user_join', (data) => {
-    console.log(`User ${data.username} joined with socket ${socket.id}`);
+    const { username } = data;
+    console.log(`👤 User ${username} joined with socket ${socket.id}`);
+    connectedUsers[username] = socket.id;
+    console.log('📊 Connected users map:', connectedUsers);
+    
     socket.broadcast.emit('user_online', {
-      username: data.username,
+      username,
       status: 'online'
     });
   });
@@ -125,6 +136,14 @@ io.on('connection', (socket) => {
   // User disconnects
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);
+    // Remove user from connectedUsers
+    for (const [username, socketId] of Object.entries(connectedUsers)) {
+      if (socketId === socket.id) {
+        delete connectedUsers[username];
+        console.log(`Removed ${username} from connected users`);
+        break;
+      }
+    }
     socket.broadcast.emit('user_offline', {
       socketId: socket.id,
       status: 'offline'
@@ -134,10 +153,74 @@ io.on('connection', (socket) => {
   // Explicit logout
   socket.on('user_logout', (data) => {
     console.log(`User ${data.username} logged out`);
+    delete connectedUsers[data.username];
     socket.broadcast.emit('user_offline', {
       username: data.username,
       status: 'offline'
     });
+  });
+
+  // WebRTC Call Events
+  socket.on('call-user', (data) => {
+    const { to, from, offer } = data;
+    const recipientSocketId = connectedUsers[to];
+    
+    console.log(`📞 Call initiated: ${from} → ${to}`);
+    console.log(`   looking for user "${to}" in map:`, connectedUsers);
+    console.log(`   Recipient socket ID: ${recipientSocketId}`);
+    
+    if (recipientSocketId) {
+      io.to(recipientSocketId).emit('call-user', {
+        from,
+        offer
+      });
+      console.log(`   ✅ Call signal sent to ${to}`);
+    } else {
+      // Notify caller that recipient is offline
+      console.log(`   ❌ User ${to} not found in connectedUsers map`);
+      io.to(socket.id).emit('user-offline', {
+        message: `${to} is offline`
+      });
+    }
+  });
+
+  socket.on('answer-call', (data) => {
+    const { to, from, answer } = data;
+    const callerSocketId = connectedUsers[to];
+    
+    console.log(`✅ Call answered: ${from} → ${to}`);
+    
+    if (callerSocketId) {
+      io.to(callerSocketId).emit('answer-call', {
+        from,
+        answer
+      });
+    }
+  });
+
+  socket.on('ice-candidate', (data) => {
+    const { to, candidate } = data;
+    const targetSocketId = connectedUsers[to];
+    
+    if (targetSocketId && candidate) {
+      io.to(targetSocketId).emit('ice-candidate', {
+        candidate
+      });
+    }
+  });
+
+  socket.on('end-call', (data) => {
+    const { to, from, reason } = data;
+    const targetSocketId = connectedUsers[to];
+    
+    console.log(`📵 Call ended: ${from} → ${to}${reason ? ` (${reason})` : ''}`);
+    
+    if (targetSocketId) {
+      io.to(targetSocketId).emit('end-call', {
+        from,
+        reason
+      });
+    }
   });
 });
 

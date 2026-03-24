@@ -1,12 +1,59 @@
 const Message = require('../models/Message');
 const User = require('../models/User');
 
+// Middleware to inject io into controller
+let io = null;
+let connectedUsers = null; // Will be set by server.js
+
+exports.setIO = (socketIO, users) => {
+  io = socketIO;
+  connectedUsers = users;
+};
+
 exports.getMessages = async (req, res) => {
   try {
     const { sender, receiver } = req.query;
 
     if (!sender || !receiver) {
       return res.status(400).json({ message: 'sender and receiver required' });
+    }
+
+    // Mark all received messages as read for the sender (current user)
+    // Use $set to handle both messages with and without isRead field
+    const result = await Message.updateMany(
+      {
+        sender: receiver,
+        receiver: sender
+      },
+      {
+        $set: { isRead: true }
+      }
+    );
+
+    console.log(`📍 Marked ${result.modifiedCount} messages as read for ${sender}`);
+
+    // Emit socket event to the specific sender to notify about read messages
+    if (io && result.modifiedCount > 0) {
+      const senderSocketId = connectedUsers?.[receiver];
+      console.log(`🔔 Emitting messages_read - sender: ${receiver}, receiver: ${sender}, targetSocketId: ${senderSocketId}`);
+      
+      if (senderSocketId) {
+        // Send to specific user
+        io.to(senderSocketId).emit('messages_read', {
+          sender: receiver,
+          receiver: sender,
+          count: result.modifiedCount
+        });
+        console.log('✅ Event sent to specific socket');
+      } else {
+        // Fallback: broadcast to all (less reliable)
+        console.log('⚠️ Sender socket not found, broadcasting to all');
+        io.emit('messages_read', {
+          sender: receiver,
+          receiver: sender,
+          count: result.modifiedCount
+        });
+      }
     }
 
     // Get all messages between two users (both directions)

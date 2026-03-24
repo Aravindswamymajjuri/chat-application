@@ -1,0 +1,131 @@
+/* Incoming Call Popup Styles */
+.incoming-call-popup {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2000;
+  animation: popupIn 0.3s ease-out;
+}
+
+@keyframes popupIn {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(0.7);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+.popup-content {
+  background: white;
+  border-radius: 20px;
+  padding: 40px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  min-width: 300px;
+  backdrop-filter: blur(10px);
+}
+
+.caller-info {
+  margin-bottom: 30px;
+}
+
+.caller-avatar {
+  font-size: 60px;
+  display: inline-block;
+  margin-bottom: 15px;
+  animation: ring 2s infinite;
+}
+
+@keyframes ring {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  10%, 20% {
+    transform: rotate(-25deg);
+  }
+  30%, 50%, 70%, 90% {
+    transform: rotate(25deg);
+  }
+  40%, 60%, 80% {
+    transform: rotate(-25deg);
+  }
+}
+
+.caller-info h3 {
+  margin: 10px 0;
+  font-size: 18px;
+  color: #333;
+  font-weight: 600;
+}
+
+.caller-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: #667eea;
+  margin: 10px 0 0 0;
+}
+
+.popup-actions {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.accept-btn,
+.reject-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+}
+
+.accept-btn {
+  background: #4ade80;
+  color: white;
+}
+
+.accept-btn:hover {
+  background: #22c55e;
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(74, 222, 128, 0.4);
+}
+
+.accept-btn:active {
+  transform: scale(0.95);
+}
+
+.reject-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.reject-btn:hover {
+  background: #dc2626;
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+.reject-btn:active {
+  transform: scale(0.95);
+}
+
+/* Backdrop overlay */
+.incoming-call-popup::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: -1;
+  backdrop-filter: blur(4px);
+}

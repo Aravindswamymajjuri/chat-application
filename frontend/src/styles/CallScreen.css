@@ -1,0 +1,134 @@
+/* Call Screen Styles */
+.call-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.call-overlay {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 40px;
+}
+
+.call-info {
+  text-align: center;
+  color: white;
+}
+
+.call-avatar {
+  font-size: 80px;
+  margin-bottom: 20px;
+  display: inline-block;
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+}
+
+.call-info h2 {
+  font-size: 28px;
+  margin: 10px 0;
+  font-weight: 700;
+}
+
+.call-status {
+  font-size: 16px;
+  margin: 0;
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+.call-status.calling,
+.call-status.ringing {
+  animation: blink 1s infinite;
+}
+
+@keyframes blink {
+  0%, 50%, 100% {
+    opacity: 0.9;
+  }
+  25%, 75% {
+    opacity: 0.5;
+  }
+}
+
+.call-status.connected {
+  color: #4ade80;
+  font-weight: 600;
+}
+
+.call-status.ended {
+  color: #ef4444;
+}
+
+.call-controls {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+}
+
+.call-control-btn {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  font-size: 28px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+}
+
+.call-control-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+}
+
+.call-control-btn:active {
+  transform: scale(0.95);
+}
+
+.mute-btn {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid white;
+}
+
+.mute-btn:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.end-btn {
+  background: #ef4444;
+  color: white;
+}
+
+.end-btn:hover {
+  background: #dc2626;
+}

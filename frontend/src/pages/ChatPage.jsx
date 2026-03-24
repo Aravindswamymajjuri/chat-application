@@ -63,8 +63,19 @@ const ChatPage = ({ currentUser, onLogout }) => {
     const socket = initializeSocket();
     console.log('🔌 Socket.IO initialized for restored session');
     
-    // Emit user join to notify others
-    emitUserJoin(currentUser.username);
+    // Wait for socket to be connected before announcing user
+    const handleConnect = () => {
+      console.log('✅ Socket connected, emitting user_join');
+      emitUserJoin(currentUser.username);
+    };
+
+    if (socket.connected) {
+      // Socket already connected
+      handleConnect();
+    } else {
+      // Wait for connection
+      socket.on('connect', handleConnect);
+    }
 
     // Setup foreground notifications
     setupForegroundNotifications((notification) => {
@@ -90,7 +101,7 @@ const ChatPage = ({ currentUser, onLogout }) => {
 
     return () => {
       // Cleanup on unmount
-      // Don't disconnect socket - just remove listener
+      socket.off('connect', handleConnect);
     };
   }, [currentUser._id, currentUser.username]);
 

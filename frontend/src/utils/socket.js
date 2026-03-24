@@ -34,7 +34,9 @@ export const getSocket = () => {
 
 export const emitUserJoin = (username) => {
   const socket = getSocket();
+  console.log(`👤 Emitting user_join for ${username}, socket connected: ${socket.connected}`);
   socket.emit('user_join', { username });
+  console.log(`✅ user_join emitted successfully`);
 };
 
 export const emitSendMessage = (sender, receiver, text, replyTo = null, messageData = null) => {
@@ -102,6 +104,11 @@ export const onStopTyping = (callback) => {
   socket.on('stop_typing', callback);
 };
 
+export const onMessagesRead = (callback) => {
+  const socket = getSocket();
+  socket.on('messages_read', callback);
+};
+
 export const onDeleteMessage = (callback) => {
   const socket = getSocket();
   socket.on('message_deleted', callback);
@@ -112,24 +119,45 @@ export const onDeleteMessageForMe = (callback) => {
   socket.on('message_deleted_for_me', callback);
 };
 
-export const emitStartCall = (caller, receiver) => {
+// WebRTC Call Events
+export const emitCallUser = (to, from, offer) => {
   const socket = getSocket();
-  socket.emit('start_call', { caller, receiver });
+  socket.emit('call-user', { to, from, offer });
 };
 
-export const emitEndCall = (caller, receiver) => {
+export const onCallUser = (callback) => {
   const socket = getSocket();
-  socket.emit('end_call', { caller, receiver });
+  socket.on('call-user', callback);
 };
 
-export const onIncomingCall = (callback) => {
+export const emitAnswerCall = (to, from, answer) => {
   const socket = getSocket();
-  socket.on('incoming_call', callback);
+  socket.emit('answer-call', { to, from, answer });
 };
 
-export const onCallEnded = (callback) => {
+export const onAnswerCall = (callback) => {
   const socket = getSocket();
-  socket.on('call_ended', callback);
+  socket.on('answer-call', callback);
+};
+
+export const emitIceCandidate = (to, candidate) => {
+  const socket = getSocket();
+  socket.emit('ice-candidate', { to, candidate });
+};
+
+export const onIceCandidate = (callback) => {
+  const socket = getSocket();
+  socket.on('ice-candidate', callback);
+};
+
+export const emitEndCall = (to, from, reason) => {
+  const socket = getSocket();
+  socket.emit('end-call', { to, from, reason });
+};
+
+export const onEndCall = (callback) => {
+  const socket = getSocket();
+  socket.on('end-call', callback);
 };
 
 export const disconnectSocket = () => {

@@ -1,16 +1,38 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { chatAPI } from '../utils/api';
-import { onReceiveMessage, onDeleteMessage, onDeleteMessageForMe, onTypingIndicator, onStopTyping } from '../utils/socket';
+import { 
+  onReceiveMessage, onDeleteMessage, onDeleteMessageForMe, onTypingIndicator, 
+  onStopTyping, onMessagesRead, onCallUser, onAnswerCall, onIceCandidate, onEndCall 
+} from '../utils/socket';
 import MessageActions from './MessageActions';
+import CallScreen from './CallScreen';
+import IncomingCallPopup from './IncomingCallPopup';
+import { useWebRTC } from '../hooks/useWebRTC';
 import '../styles/ChatWindow.css';
 
 const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply }) => {
   const [loading, setLoading] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState(null);
   const [isTyping, setIsTyping] = useState(false);
-  const [incomingCall, setIncomingCall] = useState(null);
-  const [onCall, setOnCall] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const messagesEndRef = useRef(null);
+
+  // WebRTC Hook
+  const {
+    callStatus,
+    incomingCall,
+    incomingCaller,
+    remoteAudioRef,
+    startCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+    handleRemoteEndCall,
+    handleOffer,
+    handleAnswer,
+    handleIceCandidate,
+    cleanup
+  } = useWebRTC(currentUser.username, selectedUser?.username);
 
   useEffect(() => {
     if (selectedUser) {
@@ -109,6 +131,66 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
   }, [selectedUser, currentUser.username]);
 
   useEffect(() => {
+    // Subscribe to messages being read (real-time sync)
+    const unsubscribe = onMessagesRead((data) => {
+      console.log('🔔 Socket event received - messages_read:', data);
+      console.log(`  - Sender: ${data.sender} | Receiver: ${data.receiver}`);
+      
+      // Simple approach: just update any messages that match this sender/receiver pair
+      // Don't worry about which user is currently selected
+      setMessages((prev) =>
+        prev.map((msg) => {
+          // If this message is from the sender to the receiver mentioned in the event, mark it as read
+          if (msg.sender === data.sender && msg.receiver === data.receiver && !msg.isRead) {
+            console.log(`  ✓✓ Updating message from ${data.sender}: "${msg.text}" → isRead=true`);
+            return { ...msg, isRead: true };
+          }
+          return msg;
+        })
+      );
+    });
+
+    return unsubscribe;
+  }, []);
+
+  // WebRTC Call Event Listeners
+  useEffect(() => {
+    const unsubscribeCall = onCallUser((data) => {
+      console.log('📞 Incoming call from:', data.from);
+      handleOffer(data.offer, data.from);
+    });
+
+    return unsubscribeCall;
+  }, [handleOffer]);
+
+  useEffect(() => {
+    const unsubscribeAnswer = onAnswerCall((data) => {
+      console.log('✅ Call answered by:', data.from);
+      handleAnswer(data.answer);
+    });
+
+    return unsubscribeAnswer;
+  }, [handleAnswer]);
+
+  useEffect(() => {
+    const unsubscribeIce = onIceCandidate((data) => {
+      console.log('📡 ICE candidate received');
+      handleIceCandidate(data.candidate);
+    });
+
+    return unsubscribeIce;
+  }, [handleIceCandidate]);
+
+  useEffect(() => {
+    const unsubscribeEnd = onEndCall((data) => {
+      console.log('📵 Call ended by:', data.from);
+      handleRemoteEndCall();
+    });
+
+    return unsubscribeEnd;
+  }, [handleRemoteEndCall]);
+
+  useEffect(() => {
     // Auto-scroll to bottom
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -117,6 +199,11 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
     setLoading(true);
     try {
       const response = await chatAPI.getMessages(currentUser.username, selectedUser.username);
+      console.log('📨 Messages fetched from API:', response.data);
+      console.log('Messages with isRead status:');
+      response.data.forEach(msg => {
+        console.log(`  - ${msg.sender} to ${msg.receiver}: "${msg.text}" | isRead: ${msg.isRead}`);
+      });
       setMessages(response.data);
     } catch (error) {
       console.error('Error fetching messages:', error);
@@ -150,12 +237,11 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
   };
 
   const handleStartCall = () => {
-    setOnCall(true);
-    alert(`📞 Calling ${selectedUser.username}...\n\nNote: Voice/Video calling is coming soon!`);
-  };
-
-  const handleEndCall = () => {
-    setOnCall(false);
+    if (selectedUser.isOnline) {
+      startCall();
+    } else {
+      alert(`${selectedUser.username} is offline`);
+    }
   };
 
   if (!selectedUser) {
@@ -170,6 +256,22 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
 
   return (
     <div className="chat-window">
+      {/* Call Screen (Full screen overlay) */}
+      {callStatus && <CallScreen 
+        callStatus={callStatus} 
+        remoteUser={selectedUser.username}
+        onEndCall={endCall}
+        remoteAudioRef={remoteAudioRef}
+        isMuted={isMuted}
+      />}
+
+      {/* Incoming Call Popup */}
+      {incomingCall && <IncomingCallPopup 
+        caller={incomingCaller}
+        onAccept={acceptCall}
+        onReject={rejectCall}
+      />}
+
       <div className="chat-header">
         <div className="header-info">
           <h2>{selectedUser.username}</h2>
@@ -186,7 +288,12 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
             </div>
           )}
         </div>
-        <button className="call-btn" onClick={handleStartCall} disabled={!selectedUser.isOnline} title="Call user">
+        <button 
+          className="call-btn" 
+          onClick={handleStartCall} 
+          disabled={!selectedUser.isOnline || callStatus} 
+          title={callStatus ? `${callStatus}...` : 'Call user'}
+        >
           📞
         </button>
       </div>
