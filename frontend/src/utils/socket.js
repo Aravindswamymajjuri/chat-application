@@ -3,6 +3,7 @@ import io from 'socket.io-client';
 const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || 'http://localhost:5000';
 
 let socket = null;
+let currentUsername = null;
 
 export const initializeSocket = () => {
   if (!socket) {
@@ -14,11 +15,16 @@ export const initializeSocket = () => {
     });
 
     socket.on('connect', () => {
-      console.log('Connected to socket:', socket.id);
+      console.log('✅ Socket connected:', socket.id);
+      // Re-emit user_join if we have a username stored
+      if (currentUsername) {
+        console.log(`🔄 Socket reconnected, re-emitting user_join for ${currentUsername}`);
+        socket.emit('user_join', { username: currentUsername });
+      }
     });
 
     socket.on('disconnect', () => {
-      console.log('Disconnected from socket');
+      console.log('❌ Disconnected from socket');
     });
   }
 
@@ -33,10 +39,13 @@ export const getSocket = () => {
 };
 
 export const emitUserJoin = (username) => {
+  currentUsername = username; // Store for reconnection
   const socket = getSocket();
-  console.log(`👤 Emitting user_join for ${username}, socket connected: ${socket.connected}`);
+  console.log(`👤 Registering user: ${username}, socket ID: ${socket.id}, connected: ${socket.connected}`);
+  
+  // Emit immediately and ensure it's sent
   socket.emit('user_join', { username });
-  console.log(`✅ user_join emitted successfully`);
+  console.log(`✅ user_join event emitted for ${username}`);
 };
 
 export const emitSendMessage = (sender, receiver, text, replyTo = null, messageData = null) => {

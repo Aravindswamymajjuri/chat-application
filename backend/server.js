@@ -73,9 +73,11 @@ io.on('connection', (socket) => {
   // When user joins
   socket.on('user_join', (data) => {
     const { username } = data;
+    console.log(`\n${'='.repeat(50)}`);
     console.log(`👤 User ${username} joined with socket ${socket.id}`);
     connectedUsers[username] = socket.id;
-    console.log('📊 Connected users map:', connectedUsers);
+    console.log(`📊 Connected users map now:`, Object.entries(connectedUsers).map(([u, id]) => `${u}: ${id.substring(0, 8)}...`).join(', '));
+    console.log(`${'='.repeat(50)}\n`);
     
     socket.broadcast.emit('user_online', {
       username,

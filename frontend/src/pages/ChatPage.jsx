@@ -59,23 +59,12 @@ const ChatPage = ({ currentUser, onLogout }) => {
   );
 
   useEffect(() => {
-    // Initialize Socket.IO when ChatPage loads (for page refreshes)
+    // Initialize Socket.IO when ChatPage loads
     const socket = initializeSocket();
-    console.log('🔌 Socket.IO initialized for restored session');
+    console.log('🔌 Socket.IO initialized');
     
-    // Wait for socket to be connected before announcing user
-    const handleConnect = () => {
-      console.log('✅ Socket connected, emitting user_join');
-      emitUserJoin(currentUser.username);
-    };
-
-    if (socket.connected) {
-      // Socket already connected
-      handleConnect();
-    } else {
-      // Wait for connection
-      socket.on('connect', handleConnect);
-    }
+    // Register user - will emit immediately or on reconnect
+    emitUserJoin(currentUser.username);
 
     // Setup foreground notifications
     setupForegroundNotifications((notification) => {
@@ -101,7 +90,7 @@ const ChatPage = ({ currentUser, onLogout }) => {
 
     return () => {
       // Cleanup on unmount
-      socket.off('connect', handleConnect);
+      // Socket remains connected for page refresh - just stop listening
     };
   }, [currentUser._id, currentUser.username]);
 
