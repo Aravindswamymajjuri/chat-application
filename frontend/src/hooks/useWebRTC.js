@@ -344,11 +344,16 @@ export const useWebRTC = (currentUser, remoteUser) => {
       console.log('✅ Remote description set (answer)');
       console.log(`   New signaling state: ${peerConnection.signalingState}`);
       console.log(`   ICE connection state: ${peerConnection.iceConnectionState}`);
+      
+      // START TIMER FOR CALLER when answer is received
+      // The call is now established (caller has sent offer, receiver has sent answer)
+      startCallTimer();
+      console.log('⏱️ Call timer started (caller received answer)');
     } catch (error) {
       console.error('❌ Error handling answer:', error);
       console.error('   Error message:', error.message);
     }
-  }, []);
+  }, [startCallTimer]);
 
   // Handle ICE candidate
   const handleIceCandidate = useCallback(async (candidate) => {
