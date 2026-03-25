@@ -17,9 +17,10 @@ const messageSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  isRead: {
-    type: Boolean,
-    default: false
+  status: {
+    type: String,
+    enum: ['sent', 'delivered', 'seen'],
+    default: 'sent'
   },
   deletedFor: {
     type: [String],

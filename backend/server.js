@@ -26,6 +26,9 @@ const io = socketIO(server, {
 const connectDB = require('./config/database');
 connectDB();
 
+// Models
+const Message = require('./models/Message');
+
 // Middleware
 const allowedOrigins = [
   'http://localhost:5173',      // Local development
@@ -77,7 +80,20 @@ io.on('connection', (socket) => {
     const { username } = data;
     console.log(`\n${'='.repeat(50)}`);
     console.log(`👤 User ${username} joined with socket ${socket.id}`);
+    
+    // If user was already connected, log it
+    const previousSocketId = connectedUsers[username];
+    if (previousSocketId && previousSocketId !== socket.id) {
+      console.log(`⚠️ User ${username} reconnected (was on ${previousSocketId.substring(0, 8)}...)`);
+    }
+    
+    // Update to new socket ID (effectively replaces old connection)
     connectedUsers[username] = socket.id;
+    
+    // Join a room named after the user for personal notifications
+    socket.join(`user_${username}`);
+    console.log(`📍 User ${username} joined room: user_${username}`);
+    
     console.log(`📊 Connected users map now:`, Object.entries(connectedUsers).map(([u, id]) => `${u}: ${id.substring(0, 8)}...`).join(', '));
     console.log(`${'='.repeat(50)}\n`);
     
@@ -135,6 +151,82 @@ io.on('connection', (socket) => {
       username: data.username,
       receiver: data.receiver
     });
+  });
+
+  // Mark messages as delivered (when receiver opens the app)
+  socket.on('message-delivered', (data) => {
+    const { readerUsername, originalSenderUsername, messageId } = data;
+    console.log(`\n📦 message-delivered event received`);
+    console.log(`   Reader (receiver): ${readerUsername}`);
+    console.log(`   Sender: ${originalSenderUsername}`);
+    console.log(`   Message ID: ${messageId}`);
+    
+    // Update message status to delivered
+    Message.findByIdAndUpdate(messageId, { status: 'delivered' }, { new: true })
+      .then(updatedMsg => {
+        console.log(`   ✅ Updated message status to "delivered"`);
+      })
+      .catch(err => {
+        console.error('❌ Error updating message status:', err.message);
+      });
+    
+    // Notify sender that message was delivered
+    const senderSocketId = connectedUsers?.[originalSenderUsername];
+    const deliveryData = {
+      messageId,
+      sender: originalSenderUsername,
+      receiver: readerUsername,
+      status: 'delivered'
+    };
+    
+    console.log(`   📤 Emitting message-status-updated to ${originalSenderUsername}`);
+    
+    if (senderSocketId) {
+      io.to(senderSocketId).emit('message-status-updated', deliveryData);
+      console.log(`   ✅ [DIRECT] Sent to socket`);
+    }
+    io.to(`user_${originalSenderUsername}`).emit('message-status-updated', deliveryData);
+    console.log(`   ✅ [ROOM] Sent to user_${originalSenderUsername} room`);
+  });
+
+  // Mark messages as seen (when receiver opens the chat)
+  socket.on('message-seen', (data) => {
+    const { messageId, readerUsername, originalSenderUsername } = data;
+    console.log(`\n👁️ message-seen event received`);
+    console.log(`   Message ID: ${messageId}`);
+    console.log(`   Reader (receiver): ${readerUsername}`);
+    console.log(`   Sender: ${originalSenderUsername}`);
+    
+    // Update the specific message to "seen"
+    Message.findByIdAndUpdate(
+      messageId,
+      { status: 'seen' },
+      { new: true }
+    )
+      .then(updatedMessage => {
+        console.log(`   ✅ Updated message to "seen"`);
+        
+        // Notify sender that message was seen
+        const senderSocketId = connectedUsers?.[originalSenderUsername];
+        const seenData = {
+          messageId: messageId,
+          sender: originalSenderUsername,
+          receiver: readerUsername,
+          status: 'seen'
+        };
+        
+        console.log(`   📤 Emitting message-status-updated to ${originalSenderUsername}`);
+        
+        if (senderSocketId) {
+          io.to(senderSocketId).emit('message-status-updated', seenData);
+          console.log(`   ✅ [DIRECT] Sent to socket ${senderSocketId}`);
+        }
+        io.to(`user_${originalSenderUsername}`).emit('message-status-updated', seenData);
+        console.log(`   ✅ [ROOM] Sent to user_${originalSenderUsername} room`);
+      })
+      .catch(err => {
+        console.error('❌ Error updating message status:', err.message);
+      });
   });
 
   // User disconnects

@@ -78,6 +78,44 @@ export const emitStopTyping = (username, receiver) => {
   socket.emit('user_stop_typing', { username, receiver });
 };
 
+export const emitMessageDelivered = (messageId, readerUsername, originalSenderUsername) => {
+  const socket = getSocket();
+  
+  if (!socket) {
+    console.error(`❌ Socket is null! Cannot emit message-delivered.`);
+    return;
+  }
+  
+  socket.emit('message-delivered', { 
+    messageId,
+    readerUsername,
+    originalSenderUsername
+  });
+};
+
+export const emitMessageSeen = (messageId, readerUsername, originalSenderUsername) => {
+  const socket = getSocket();
+  
+  if (!socket) {
+    console.error(`❌ Socket is null! Cannot emit message-seen.`);
+    return;
+  }
+  
+  // Validate messageId before emitting
+  if (!messageId) {
+    console.warn(`⚠️ Cannot emit message-seen: messageId is undefined`, { messageId, readerUsername, originalSenderUsername });
+    return;
+  }
+  
+  console.log(`📤 Emitting message-seen:`, { messageId: String(messageId), readerUsername, originalSenderUsername });
+  
+  socket.emit('message-seen', { 
+    messageId: String(messageId),
+    readerUsername,
+    originalSenderUsername
+  });
+};
+
 export const emitUserLogout = (username) => {
   const socket = getSocket();
   socket.emit('user_logout', { username });
@@ -113,9 +151,14 @@ export const onStopTyping = (callback) => {
   socket.on('stop_typing', callback);
 };
 
-export const onMessagesRead = (callback) => {
+export const onMessageStatusUpdated = (callback) => {
   const socket = getSocket();
-  socket.on('messages_read', callback);
+  socket.on('message-status-updated', callback);
+  
+  // Return unsubscribe function
+  return () => {
+    socket.off('message-status-updated', callback);
+  };
 };
 
 export const onDeleteMessage = (callback) => {

@@ -18,45 +18,50 @@ exports.getMessages = async (req, res) => {
       return res.status(400).json({ message: 'sender and receiver required' });
     }
 
-    // Mark all received messages as read for the sender (current user)
-    // Use $set to handle both messages with and without isRead field
+    console.log(`\n${'='.repeat(70)}`);
+    console.log(`📋 getMessages called`);
+    console.log(`   Current user (reader): ${sender}`);
+    console.log(`   Viewing messages from: ${receiver}`);
+    
+    // Mark all messages from receiver to sender as "seen"
     const result = await Message.updateMany(
       {
         sender: receiver,
-        receiver: sender
+        receiver: sender,
+        status: { $in: ['sent', 'delivered'] } // Only mark unseen messages
       },
       {
-        $set: { isRead: true }
+        $set: { status: 'seen' }
       }
     );
 
-    console.log(`📍 Marked ${result.modifiedCount} messages as read for ${sender}`);
+    console.log(`   Marked ${result.modifiedCount} messages as seen`);
 
-    // Emit socket event to the specific sender to notify about read messages
+    // Emit socket event to notify the sender that their messages were seen
     if (io && result.modifiedCount > 0) {
       const senderSocketId = connectedUsers?.[receiver];
-      console.log(`🔔 Emitting messages_read - sender: ${receiver}, receiver: ${sender}, targetSocketId: ${senderSocketId}`);
       
+      const messageData = {
+        sender: receiver,
+        receiver: sender,
+        count: result.modifiedCount
+      };
+      
+      console.log(`\n📤 Emitting message-seen event to ${receiver}`);
+      
+      // Try multiple delivery methods
       if (senderSocketId) {
-        // Send to specific user
-        io.to(senderSocketId).emit('messages_read', {
-          sender: receiver,
-          receiver: sender,
-          count: result.modifiedCount
-        });
-        console.log('✅ Event sent to specific socket');
-      } else {
-        // Fallback: broadcast to all (less reliable)
-        console.log('⚠️ Sender socket not found, broadcasting to all');
-        io.emit('messages_read', {
-          sender: receiver,
-          receiver: sender,
-          count: result.modifiedCount
-        });
+        io.to(senderSocketId).emit('message-seen', messageData);
+        console.log(`   ✅ [DIRECT] Emitted to socket`);
       }
+      
+      io.to(`user_${receiver}`).emit('message-seen', messageData);
+      console.log(`   ✅ [ROOM] Emitted to user_${receiver} room`);
+      
+      console.log(`${'='.repeat(70)}\n`);
     }
 
-    // Get all messages between two users (both directions)
+    // Get all messages between two users
     const messages = await Message.find({
       $or: [
         { sender, receiver },
@@ -64,20 +69,33 @@ exports.getMessages = async (req, res) => {
       ]
     }).sort({ timestamp: 1 });
 
-    // Filter out messages that are deleted for current user
+    console.log(`📨 Returning ${messages.length} messages`);
+
+    // Convert to plain objects with proper field serialization
     const filteredMessages = messages.map(msg => {
+      const msgObj = {
+        _id: msg._id,
+        sender: msg.sender,
+        receiver: msg.receiver,
+        text: msg.text,
+        timestamp: msg.timestamp,
+        status: msg.status || 'sent', // Default to sent if not set
+        deletedFor: msg.deletedFor || [],
+        replyTo: msg.replyTo || null
+      };
+      
+      // Apply deletion if applicable
       if (msg.deletedFor && msg.deletedFor.includes(sender)) {
-        return {
-          ...msg.toObject(),
-          text: '[Deleted message]',
-          deletedForMe: true
-        };
+        msgObj.text = '[Deleted message]';
+        msgObj.deletedForMe = true;
       }
-      return msg;
+      
+      return msgObj;
     });
 
     res.status(200).json(filteredMessages);
   } catch (error) {
+    console.error('Error fetching messages:', error);
     res.status(500).json({ message: 'Error fetching messages', error: error.message });
   }
 };

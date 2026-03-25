@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { chatAPI } from '../utils/api';
 import { 
   onReceiveMessage, onDeleteMessage, onDeleteMessageForMe, onTypingIndicator, 
-  onStopTyping, onMessagesRead, onCallUser, onAnswerCall, onIceCandidate, onEndCall 
+  onStopTyping, onMessageStatusUpdated, onCallUser, onAnswerCall, onIceCandidate, onEndCall, emitMessageSeen, emitMessageDelivered 
 } from '../utils/socket';
 import MessageActions from './MessageActions';
 import CallScreen from './CallScreen';
@@ -42,6 +42,56 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
     toggleSpeaker
   } = useWebRTC(currentUser.username, selectedUser?.username);
 
+  // Set up all socket listeners first (component mount)
+  useEffect(() => {
+    console.log('🔌 Setting up socket listeners (on component mount)');
+  }, []);
+
+  // Subscribe to message status updates
+  useEffect(() => {
+    const unsubscribe = onMessageStatusUpdated((data) => {
+      console.log(`\n${'='.repeat(70)}`);
+      console.log(`📖 message-status-updated event received`);
+      console.log(`   Message ID: ${data.messageId}`);
+      console.log(`   From: ${data.sender} (sender)`);
+      console.log(`   To: ${data.receiver} (reader)`);
+      console.log(`   New Status: ${data.status}`);
+      console.log(`   Current user: ${currentUser.username}`);
+      console.log(`${'='.repeat(70)}`);
+      
+      // Update messages when status changes
+      if (data.sender === currentUser.username) {
+        console.log(`✅ This is our message, updating UI...`);
+        setMessages((prev) => {
+          let found = false;
+          const updated = prev.map((msg) => {
+            // Convert both to strings for comparison (handle MongoDB ObjectId)
+            const msgIdStr = String(msg._id);
+            const dataIdStr = String(data.messageId);
+            
+            if (msgIdStr === dataIdStr) {
+              console.log(`   ✓✓ Match found! Updating "${msg.text.substring(0, 30)}" from "${msg.status}" to "${data.status}"`);
+              found = true;
+              return { ...msg, status: data.status };
+            }
+            return msg;
+          });
+          
+          if (!found) {
+            console.log(`⚠️ No message matched with ID ${data.messageId}`);
+            console.log(`   Available messages:`, prev.map(m => ({ id: String(m._id), sender: m.sender })));
+          }
+          
+          return updated;
+        });
+      } else {
+        console.log(`⚠️ This is not our message (sender is ${data.sender})`);
+      }
+    });
+
+    return unsubscribe;
+  }, [currentUser.username]);
+
   useEffect(() => {
     if (selectedUser) {
       fetchMessages();
@@ -61,6 +111,16 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
       
       if (isForCurrentConversation) {
         console.log('✅ Adding message to conversation');
+        console.log(`   Message ID: ${String(message._id)}`);
+        
+        // Emit message-delivered immediately
+        console.log(`📦 Emitting message-delivered for: ${message.sender}`);
+        emitMessageDelivered(message._id, currentUser.username, message.sender);
+        
+        // If chat is already open, mark as seen immediately
+        console.log(`👁️ Emitting message-seen immediately (chat is open)`);
+        emitMessageSeen(message._id, currentUser.username, message.sender);
+        
         setMessages((prev) => {
           // Check if message already exists (to avoid duplicates from onMessageSent)
           const isDuplicate = prev.some(
@@ -138,29 +198,6 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
     return unsubscribe;
   }, [selectedUser, currentUser.username]);
 
-  useEffect(() => {
-    // Subscribe to messages being read (real-time sync)
-    const unsubscribe = onMessagesRead((data) => {
-      console.log('🔔 Socket event received - messages_read:', data);
-      console.log(`  - Sender: ${data.sender} | Receiver: ${data.receiver}`);
-      
-      // Simple approach: just update any messages that match this sender/receiver pair
-      // Don't worry about which user is currently selected
-      setMessages((prev) =>
-        prev.map((msg) => {
-          // If this message is from the sender to the receiver mentioned in the event, mark it as read
-          if (msg.sender === data.sender && msg.receiver === data.receiver && !msg.isRead) {
-            console.log(`  ✓✓ Updating message from ${data.sender}: "${msg.text}" → isRead=true`);
-            return { ...msg, isRead: true };
-          }
-          return msg;
-        })
-      );
-    });
-
-    return unsubscribe;
-  }, []);
-
   // WebRTC Call Event Listeners
   useEffect(() => {
     const unsubscribeCall = onCallUser((data) => {
@@ -207,12 +244,26 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
     setLoading(true);
     try {
       const response = await chatAPI.getMessages(currentUser.username, selectedUser.username);
-      console.log('📨 Messages fetched from API:', response.data);
-      console.log('Messages with isRead status:');
+      
+      console.log(`\n${'='.repeat(70)}`);
+      console.log(`📨 API Response received with ${response.data.length} messages`);
       response.data.forEach(msg => {
-        console.log(`  - ${msg.sender} to ${msg.receiver}: "${msg.text}" | isRead: ${msg.isRead}`);
+        console.log(`   - ${msg.sender} → ${msg.receiver}: status=${msg.status}, _id=${String(msg._id)}`);
       });
+      
       setMessages(response.data);
+      console.log(`✅ State updated with ${response.data.length} messages`);
+      
+      // Emit socket event to mark unseen messages as seen in real-time
+      console.log(`\n📤 Emitting message-seen for unseen messages...`);
+      response.data.forEach(msg => {
+        if (msg.sender === selectedUser.username && msg.status !== 'seen') {
+          console.log(`   📤 Emitting for message: ${String(msg._id)} from ${msg.sender}`);
+          emitMessageSeen(msg._id, currentUser.username, msg.sender);
+        }
+      });
+      console.log(`${'='.repeat(70)}\n`);
+      
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -350,8 +401,10 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
                     minute: '2-digit'
                   })}
                   {msg.sender === currentUser.username && (
-                    <span className={`read-status ${msg.isRead ? 'read' : 'delivered'}`}>
-                      {msg.isRead ? '✓✓' : '✓'}
+                    <span className={`read-status ${msg.status === 'seen' ? 'seen' : msg.status === 'delivered' ? 'delivered' : 'sent'}`}>
+                      {msg.status === 'sent' && '✓'}
+                      {msg.status === 'delivered' && '✓✓'}
+                      {msg.status === 'seen' && '✓✓'}
                     </span>
                   )}
                 </div>
