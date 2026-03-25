@@ -101,6 +101,8 @@ export const useWebRTC = (currentUser, remoteUser) => {
       }
       
       if (remoteAudioRef.current) {
+        console.log('🔊 Audio element found, setting up stream...');
+        
         // Use the stream directly if available
         if (event.streams && event.streams.length > 0) {
           console.log('✅ Setting audio element srcObject to remote stream');
@@ -116,28 +118,36 @@ export const useWebRTC = (currentUser, remoteUser) => {
         }
         
         // Ensure audio element is ready to play
-        console.log('🔊 Attempting to play remote audio...');
+        console.log('🔊 Configuring audio element for playback...');
         // Make sure element is not muted and has correct attributes
         remoteAudioRef.current.muted = false;
         remoteAudioRef.current.volume = 1.0;
         
-        const playPromise = remoteAudioRef.current.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              console.log('✅ Remote audio playing successfully');
-              console.log(`   Volume: ${remoteAudioRef.current.volume}`);
-            })
-            .catch(err => {
-              console.error('❌ Error playing audio:', err);
-              console.log('   Possible reasons: autoplay policy, muted tab, no audio data');
-              console.log('   Trying to resume on user interaction...');
-              // Store reference to try playing on user click
-              window.__remoteAudioRef = remoteAudioRef.current;
-            });
-        }
+        console.log(`   Muted: ${remoteAudioRef.current.muted}, Volume: ${remoteAudioRef.current.volume}`);
+        
+        // Try to play - use setTimeout to ensure DOM is ready
+        setTimeout(() => {
+          const playPromise = remoteAudioRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                console.log('✅ Remote audio playing successfully');
+                console.log(`   Volume: ${remoteAudioRef.current.volume}`);
+                console.log(`   Paused: ${remoteAudioRef.current.paused}`);
+              })
+              .catch(err => {
+                console.error('❌ Error playing audio:', err);
+                console.error(`   Error name: ${err.name}`);
+                console.error(`   Error message: ${err.message}`);
+                console.log('   Possible reasons: autoplay policy, muted tab, no audio data');
+                console.log('   Trying to resume on user interaction...');
+                // Store reference to try playing on user click
+                window.__remoteAudioRef = remoteAudioRef.current;
+              });
+          }
+        }, 0);
       } else {
-        console.error('❌ remoteAudioRef is null');
+        console.error('❌ remoteAudioRef is null - audio element not found in DOM!');
       }
     });
 
@@ -349,6 +359,7 @@ export const useWebRTC = (currentUser, remoteUser) => {
       // The call is now established (caller has sent offer, receiver has sent answer)
       // Note: We need to start the timer here, but we use a direct reference to avoid circular dependency
       if (callStartTimeRef.current === null) {
+        console.log('⏱️ Starting call timer for caller (answer received)...');
         callStartTimeRef.current = Date.now();
         setCallDuration(0);
         
@@ -357,8 +368,9 @@ export const useWebRTC = (currentUser, remoteUser) => {
           setCallDuration(elapsed);
         }, 1000);
 
-        // Network quality will be monitored separately by the receiver's acceptCall timer
-        console.log('⏱️ Call timer started (caller received answer)');
+        console.log('✅ Caller timer started successfully');
+      } else {
+        console.log('⏱️ Timer already running, skipping restart');
       }
     } catch (error) {
       console.error('❌ Error handling answer:', error);
@@ -480,6 +492,7 @@ export const useWebRTC = (currentUser, remoteUser) => {
 
   // Start call timer
   const startCallTimer = useCallback(() => {
+    console.log('⏱️ Starting call timer...');
     callStartTimeRef.current = Date.now();
     setCallDuration(0);
     
@@ -491,6 +504,8 @@ export const useWebRTC = (currentUser, remoteUser) => {
     // Start monitoring network quality
     monitorNetworkQuality(); // First check immediately
     statsIntervalRef.current = setInterval(monitorNetworkQuality, 2000); // Then every 2 seconds
+    
+    console.log('✅ Call timer started successfully');
   }, [monitorNetworkQuality]);
 
   // Stop call timer
@@ -530,6 +545,9 @@ export const useWebRTC = (currentUser, remoteUser) => {
   const cleanup = useCallback(() => {
     // Stop timers
     stopCallTimer();
+
+    // Reset timer reference for next call
+    callStartTimeRef.current = null;
 
     // Close peer connection
     if (peerConnectionRef.current) {
