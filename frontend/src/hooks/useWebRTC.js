@@ -357,17 +357,14 @@ export const useWebRTC = (currentUser, remoteUser) => {
           setCallDuration(elapsed);
         }, 1000);
 
-        // Start monitoring network quality
-        monitorNetworkQuality();
-        statsIntervalRef.current = setInterval(monitorNetworkQuality, 2000);
-        
+        // Network quality will be monitored separately by the receiver's acceptCall timer
         console.log('⏱️ Call timer started (caller received answer)');
       }
     } catch (error) {
       console.error('❌ Error handling answer:', error);
       console.error('   Error message:', error.message);
     }
-  }, [monitorNetworkQuality]);
+  }, []);
 
   // Handle ICE candidate
   const handleIceCandidate = useCallback(async (candidate) => {
