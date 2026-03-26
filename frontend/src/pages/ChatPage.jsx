@@ -1,11 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Sidebar from '../components/Sidebar';
 import ChatWindow from '../components/ChatWindow';
 import MessageInput from '../components/MessageInput';
 import AppLockModal from '../components/AppLockModal';
 import Settings from '../components/Settings';
 import { authAPI, usersAPI } from '../utils/api';
-import { disconnectSocket, emitUserLogout, initializeSocket, emitUserJoin } from '../utils/socket';
+import { disconnectSocket, emitUserLogout, initializeSocket, emitUserJoin, onUnreadCountUpdated, onUnreadCountCleared, emitClearUnreadCount } from '../utils/socket';
 import { setupForegroundNotifications, requestFCMToken, registerServiceWorker } from '../utils/firebase';
 import { useAppSecurity, setAppLockSession, wasAppLocked } from '../utils/security';
 import '../styles/ChatPage.css';
@@ -19,6 +19,36 @@ const ChatPage = ({ currentUser, onLogout }) => {
   const [hasAppLock, setHasAppLock] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
+  // Track unread message counts: { username: count }
+  const [unreadCounts, setUnreadCounts] = useState({});
+
+  // Memoize callback functions to prevent infinite loops in child components
+  const handleClearUnread = useCallback((username) => {
+    setUnreadCounts((prev) => {
+      const updated = { ...prev };
+      delete updated[username];
+      return updated;
+    });
+  }, []);
+
+  const handleIncrementUnread = useCallback((username) => {
+    setUnreadCounts((prev) => ({
+      ...prev,
+      [username]: (prev[username] || 0) + 1
+    }));
+  }, []);
+
+  const handleReply = useCallback((msg) => {
+    setReplyingTo(msg);
+  }, []);
+
+  // Emit clear-unread-count when user selects a different chat
+  useEffect(() => {
+    if (selectedUser) {
+      console.log(`📤 Emitting clear-unread-count from ChatPage for ${selectedUser.username}`);
+      emitClearUnreadCount(currentUser.username, selectedUser.username);
+    }
+  }, [selectedUser?.username, currentUser.username]);
 
   // Check if app lock is enabled
   useEffect(() => {
@@ -74,25 +104,109 @@ const ChatPage = ({ currentUser, onLogout }) => {
       }
     });
 
-    // Try to update FCM token on page load
-    (async () => {
+    // Initialize FCM notifications with proper sequencing
+    const initializeFCM = async () => {
       try {
-        await registerServiceWorker();
+        console.log('🔔 Starting FCM initialization...');
+        
+        // Step 1: Register Service Worker first (MUST be before requesting token)
+        const swRegistration = await registerServiceWorker();
+        if (!swRegistration) {
+          console.warn('⚠️ Service Worker registration returned null');
+          return;
+        }
+        console.log('✅ Service Worker registered successfully');
+
+        // Step 2: Wait a bit for Service Worker to be active
+        let retries = 0;
+        while (!swRegistration.active && retries < 10) {
+          console.log(`⏳ Waiting for Service Worker to become active... (${retries + 1}/10)`);
+          await new Promise(resolve => setTimeout(resolve, 500));
+          retries++;
+        }
+
+        if (!swRegistration.active) {
+          console.warn('⚠️ Service Worker did not become active within timeout');
+          return;
+        }
+
+        console.log('✅ Service Worker is now active');
+
+        // Step 3: Request FCM token (now that SW is active)
         const fcmToken = await requestFCMToken();
-        if (fcmToken && currentUser._id) {
+        if (!fcmToken) {
+          console.warn('⚠️ FCM token request returned null/empty');
+          return;
+        }
+        console.log('✅ FCM Token obtained successfully');
+
+        // Step 4: Send token to backend
+        if (currentUser._id) {
           await authAPI.updateFCMToken(currentUser._id, fcmToken);
-          console.log('✅ FCM token updated on page load');
+          console.log('✅ FCM token sent to backend and stored in database');
+        } else {
+          console.warn('⚠️ User ID missing - cannot store FCM token on backend');
         }
       } catch (error) {
-        console.warn('Could not update FCM token:', error.message);
+        console.error('❌ FCM initialization failed:', error);
+        console.error('Notification details:', {
+          message: error.message,
+          stack: error.stack
+        });
       }
-    })();
+    };
+
+    // Start FCM initialization
+    initializeFCM();
 
     return () => {
       // Cleanup on unmount
       // Socket remains connected for page refresh - just stop listening
     };
   }, [currentUser._id, currentUser.username]);
+
+  // Fetch unread message counts on load
+  useEffect(() => {
+    const fetchUnreadCounts = async () => {
+      try {
+        console.log('📬 Fetching unread message counts...');
+        const response = await usersAPI.getUnreadCounts(currentUser._id);
+        setUnreadCounts(response.data.unreadCounts || {});
+        console.log('✅ Unread counts loaded:', response.data.unreadCounts);
+      } catch (error) {
+        console.warn('Could not fetch unread counts:', error.message);
+      }
+    };
+
+    if (currentUser._id) {
+      fetchUnreadCounts();
+    }
+  }, [currentUser._id]);
+
+  // Listen for unread count updates via socket
+  useEffect(() => {
+    const unsubscribeUpdated = onUnreadCountUpdated((data) => {
+      console.log('📬 Unread count updated:', data);
+      setUnreadCounts((prev) => ({
+        ...prev,
+        [data.senderUsername]: data.count
+      }));
+    });
+
+    const unsubscribeCleared = onUnreadCountCleared((data) => {
+      console.log('✅ Unread count cleared:', data);
+      setUnreadCounts((prev) => {
+        const updated = { ...prev };
+        delete updated[data.senderUsername];
+        return updated;
+      });
+    });
+
+    return () => {
+      unsubscribeUpdated();
+      unsubscribeCleared();
+    };
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -177,6 +291,7 @@ const ChatPage = ({ currentUser, onLogout }) => {
           onSelectUser={setSelectedUser}
           users={users}
           setUsers={setUsers}
+          unreadCounts={unreadCounts}
         />
 
         <div className="chat-main">
@@ -185,7 +300,10 @@ const ChatPage = ({ currentUser, onLogout }) => {
             selectedUser={selectedUser}
             messages={messages}
             setMessages={setMessages}
-            onReply={(msg) => setReplyingTo(msg)}
+            onReply={handleReply}
+            unreadCounts={unreadCounts}
+            onClearUnread={handleClearUnread}
+            onIncrementUnread={handleIncrementUnread}
           />
 
           {selectedUser && (

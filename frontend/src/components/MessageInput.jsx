@@ -58,13 +58,27 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
 
       // Send push notification
       try {
-        await notificationAPI.sendNotificationByUsername(
+        console.log(`📱 Sending notification to ${selectedUser.username}...`);
+        const notifResponse = await notificationAPI.sendNotificationByUsername(
           selectedUser.username,
           currentUser.username,
           messageText
         );
+        console.log('✅ Notification sent successfully:', notifResponse.data);
       } catch (notifError) {
-        console.warn('Notification failed (but message was sent):', notifError.message);
+        console.warn('⚠️ Notification failed (but message was sent):', {
+          status: notifError.response?.status,
+          message: notifError.response?.data?.message || notifError.message,
+          fullError: notifError
+        });
+        
+        // Show user that notification failed but message was sent
+        if (notifError.response?.status === 400) {
+          console.warn('Possible reasons:');
+          console.warn('- User has not granted notification permission');
+          console.warn('- FCM token not stored in database');
+          console.warn('- Receiver user not found');
+        }
       }
 
       // Callback to update UI with the saved message data (includes _id and properly formatted replyTo)

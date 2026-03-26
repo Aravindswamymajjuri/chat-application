@@ -36,7 +36,16 @@ export const usersAPI = {
     axios.get(`${API_BASE_URL}/users/${userId}`),
 
   updateOnlineStatus: (userId, isOnline, socketId) =>
-    axios.put(`${API_BASE_URL}/users/status`, { userId, isOnline, socketId })
+    axios.put(`${API_BASE_URL}/users/status`, { userId, isOnline, socketId }),
+
+  getUnreadCounts: (userId) =>
+    axios.get(`${API_BASE_URL}/users/${userId}/unread-counts`),
+
+  clearUnreadCount: (userId, senderUsername) =>
+    axios.post(`${API_BASE_URL}/users/unread-counts/clear`, { userId, senderUsername }),
+
+  incrementUnreadCount: (userId, senderUsername) =>
+    axios.post(`${API_BASE_URL}/users/unread-counts/increment`, { userId, senderUsername })
 };
 
 export const chatAPI = {

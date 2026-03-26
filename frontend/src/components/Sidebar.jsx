@@ -3,7 +3,7 @@ import { usersAPI } from '../utils/api';
 import { emitUserJoin } from '../utils/socket';
 import '../styles/Sidebar.css';
 
-const Sidebar = ({ currentUser, selectedUser, onSelectUser, users, setUsers }) => {
+const Sidebar = ({ currentUser, selectedUser, onSelectUser, users, setUsers, unreadCounts }) => {
   const [searchTerm, setSearchTerm] = useState('');
 
   useEffect(() => {
@@ -42,18 +42,29 @@ const Sidebar = ({ currentUser, selectedUser, onSelectUser, users, setUsers }) =
       />
 
       <div className="users-list">
-        {filteredUsers.map((user) => (
-          <div
-            key={user._id}
-            className={`user-item ${selectedUser?._id === user._id ? 'active' : ''}`}
-            onClick={() => onSelectUser(user)}
-          >
-            <div className="user-info">
-              <span className="user-name">{user.username}</span>
-              <div className={`user-status ${user.isOnline ? 'online' : 'offline'}`}></div>
+        {filteredUsers.map((user) => {
+          const unreadCount = unreadCounts?.[user.username] || 0;
+          
+          return (
+            <div
+              key={user._id}
+              className={`user-item ${selectedUser?._id === user._id ? 'active' : ''}`}
+              onClick={() => onSelectUser(user)}
+            >
+              <div className="user-info">
+                <span className="user-name">{user.username}</span>
+                <div className={`user-status ${user.isOnline ? 'online' : 'offline'}`}></div>
+              </div>
+              
+              {/* Unread badge */}
+              {unreadCount > 0 && (
+                <div className="unread-badge">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

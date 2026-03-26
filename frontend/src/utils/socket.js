@@ -135,6 +135,39 @@ export const emitUserLogout = (username) => {
   socket.emit('user_logout', { username });
 };
 
+// Unread count events
+export const emitClearUnreadCount = (username, senderUsername) => {
+  const socket = getSocket();
+  console.log(`📤 Emitting clear-unread-count: user=${username}, sender=${senderUsername}`);
+  socket.emit('clear-unread-count', { username, senderUsername });
+};
+
+export const emitUnreadCountUpdate = (receiverUsername, senderUsername, count) => {
+  const socket = getSocket();
+  console.log(`📤 Emitting unread-count-update: receiver=${receiverUsername}, sender=${senderUsername}, count=${count}`);
+  socket.emit('unread-count-update', { receiverUsername, senderUsername, count });
+};
+
+export const onUnreadCountUpdated = (callback) => {
+  const socket = getSocket();
+  socket.on('unread-count-updated', callback);
+  
+  // Return unsubscribe function
+  return () => {
+    socket.off('unread-count-updated', callback);
+  };
+};
+
+export const onUnreadCountCleared = (callback) => {
+  const socket = getSocket();
+  socket.on('unread-count-cleared', callback);
+  
+  // Return unsubscribe function
+  return () => {
+    socket.off('unread-count-cleared', callback);
+  };
+};
+
 export const onReceiveMessage = (callback) => {
   const socket = getSocket();
   socket.on('receive_message', callback);

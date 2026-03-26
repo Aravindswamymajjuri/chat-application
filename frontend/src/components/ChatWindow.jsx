@@ -1,8 +1,8 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { chatAPI } from '../utils/api';
+import { chatAPI, usersAPI } from '../utils/api';
 import { 
   onReceiveMessage, onDeleteMessage, onDeleteMessageForMe, onTypingIndicator, 
-  onStopTyping, onMessageStatusUpdated, onCallUser, onAnswerCall, onIceCandidate, onEndCall, emitMessageSeen, emitMessageDelivered 
+  onStopTyping, onMessageStatusUpdated, onCallUser, onAnswerCall, onIceCandidate, onEndCall, emitMessageSeen, emitMessageDelivered
 } from '../utils/socket';
 import MessageActions from './MessageActions';
 import CallScreen from './CallScreen';
@@ -11,7 +11,7 @@ import CallHistory from './CallHistory';
 import { useWebRTC } from '../hooks/useWebRTC';
 import '../styles/ChatWindow.css';
 
-const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply }) => {
+const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply, unreadCounts, onClearUnread, onIncrementUnread }) => {
   const [loading, setLoading] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState(null);
   const [showCallHistory, setShowCallHistory] = useState(false);
@@ -95,8 +95,12 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
   useEffect(() => {
     if (selectedUser) {
       fetchMessages();
+      
+      // Clear unread count when user opens this chat (updated via ChatPage's socket listener)
+      console.log(`👁️ Opening chat with ${selectedUser.username} - clearing unread count`);
+      onClearUnread?.(selectedUser.username);
     }
-  }, [selectedUser]);
+  }, [selectedUser?.username, currentUser.username, currentUser._id]);
 
   useEffect(() => {
     // Subscribe to incoming messages
@@ -138,17 +142,24 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply 
           return [...prev, message];
         });
       } else {
-        console.log('❌ Message not for current conversation', {
-          messageSender: message.sender,
-          messageReceiver: message.receiver,
-          currentUser: currentUser.username,
-          selectedUser: selectedUser.username
-        });
+        // Message is for a DIFFERENT user - increment unread count
+        console.log('📬 Message not for current conversation - incrementing unread count');
+        console.log(`   From: ${message.sender}, To: ${message.receiver}`);
+        
+        // Only increment if this user received the message
+        if (message.receiver === currentUser.username) {
+          console.log(`✅ Incrementing unread count for: ${message.sender}`);
+          onIncrementUnread?.(message.sender);
+          
+          // Also update backend unread count
+          usersAPI.incrementUnreadCount(currentUser._id, message.sender)
+            .catch(err => console.warn('Could not update backend unread count:', err.message));
+        }
       }
     });
 
     return unsubscribe;
-  }, [selectedUser, currentUser.username, setMessages]);
+  }, [selectedUser, currentUser.username, currentUser._id, setMessages, onIncrementUnread]);
 
   useEffect(() => {
     // Subscribe to message deletion events (for everyone)

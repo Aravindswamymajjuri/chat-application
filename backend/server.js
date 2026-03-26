@@ -239,6 +239,38 @@ io.on('connection', (socket) => {
       });
   });
 
+  // Update unread message count
+  socket.on('unread-count-update', (data) => {
+    const { receiverUsername, senderUsername, count } = data;
+    console.log(`\n💬 unread-count-update event received`);
+    console.log(`   Receiver: ${receiverUsername}`);
+    console.log(`   Sender: ${senderUsername}`);
+    console.log(`   Count: ${count}`);
+    
+    // Broadcast to the receiver so their UI updates
+    io.to(`user_${receiverUsername}`).emit('unread-count-updated', {
+      senderUsername,
+      count
+    });
+    
+    console.log(`   📤 Emitted unread-count-updated to user_${receiverUsername}`);
+  });
+
+  // Clear unread count when user opens chat
+  socket.on('clear-unread-count', (data) => {
+    const { username, senderUsername } = data;
+    console.log(`\n✅ clear-unread-count event received`);
+    console.log(`   User: ${username}`);
+    console.log(`   Cleared for: ${senderUsername}`);
+    
+    // Broadcast to the user so their UI updates
+    io.to(`user_${username}`).emit('unread-count-cleared', {
+      senderUsername
+    });
+    
+    console.log(`   📤 Emitted unread-count-cleared to user_${username}`);
+  });
+
   // User disconnects
   socket.on('disconnect', () => {
     console.log(`User disconnected: ${socket.id}`);

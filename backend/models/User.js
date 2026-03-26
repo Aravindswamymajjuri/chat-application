@@ -31,6 +31,12 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  // Track unread message counts per user: { username: count }
+  unreadCounts: {
+    type: Map,
+    of: Number,
+    default: new Map()
+  },
   createdAt: {
     type: Date,
     default: Date.now

@@ -16,26 +16,51 @@ const messaging = getMessaging(app);
 // Request FCM token
 export const requestFCMToken = async () => {
   try {
+    console.log('📱 Requesting notification permission...');
+    console.log(`   Current permission status: ${Notification.permission}`);
+    
     const permission = await Notification.requestPermission();
+    console.log(`   Permission result: ${permission}`);
     
     if (permission === 'granted') {
-      const token = await getToken(messaging, {
-        vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
-      });
+      console.log('✅ Notification permission GRANTED');
       
-      if (token) {
-        console.log('FCM Token:', token);
-        return token;
-      } else {
-        console.log('No registration token available');
+      try {
+        const token = await getToken(messaging, {
+          vapidKey: import.meta.env.VITE_FIREBASE_VAPID_KEY
+        });
+        
+        if (token) {
+          console.log('✅ FCM Token obtained successfully');
+          console.log(`   Token (first 30 chars): ${token.substring(0, 30)}...`);
+          return token;
+        } else {
+          console.error('❌ getToken() returned empty/null');
+          console.error('   Possible reasons:');
+          console.error('   1. VITE_FIREBASE_VAPID_KEY env variable is missing/invalid');
+          console.error('   2. Service Worker not registered or not active');
+          console.error('   3. Firebase configuration is invalid');
+          return null;
+        }
+      } catch (tokenError) {
+        console.error('❌ Error in getToken():', tokenError.message);
+        console.error('   Error code:', tokenError.code);
+        console.error('   Error details:', tokenError);
         return null;
       }
+    } else if (permission === 'denied') {
+      console.warn('⚠️ Notification permission DENIED by user');
+      console.warn('   User clicked "Block" or previously denied permission');
+      console.warn('   To fix: Browser Settings → Notifications → Allow this site');
+      return null;
     } else {
-      console.log('Notification permission denied');
+      console.warn('⚠️ Notification permission status:', permission);
       return null;
     }
   } catch (error) {
-    console.error('Error getting FCM token:', error);
+    console.error('❌ Error requesting notification permission:', error);
+    console.error('   Error message:', error.message);
+    console.error('   Full error:', error);
     return null;
   }
 };
@@ -54,15 +79,34 @@ export const setupForegroundNotifications = (callback) => {
 export const registerServiceWorker = async () => {
   try {
     if ('serviceWorker' in navigator) {
+      console.log('🔄 Registering Service Worker...');
+      console.log('   Path: /firebase-messaging-sw.js');
+      console.log('   Scope: /');
+      
       const registration = await navigator.serviceWorker.register(
         '/firebase-messaging-sw.js',
         { scope: '/' }
       );
-      console.log('Service Worker registered:', registration);
+      
+      console.log('✅ Service Worker registration successful');
+      console.log(`   Scope: ${registration.scope}`);
+      console.log(`   State: ${registration.installing ? 'installing' : registration.waiting ? 'waiting' : registration.active ? 'active' : 'unknown'}`);
+      
       return registration;
+    } else {
+      console.error('❌ Service Workers not supported in this browser');
+      console.error('   This browser does not support Push Notifications');
+      return null;
     }
   } catch (error) {
-    console.error('Service Worker registration failed:', error);
+    console.error('❌ Service Worker registration failed:', error);
+    console.error('   Error message:', error.message);
+    console.error('   Possible causes:');
+    console.error('   1. File not found: /firebase-messaging-sw.js does not exist');
+    console.error('   2. Cross-origin: Service Worker not accessible (CORS issue)');
+    console.error('   3. Browser security: Running on non-HTTPS or localhost');
+    console.error('   4. Invalid scope: Check vercel.json Service-Worker-Allowed header');
+    return null;
   }
 };
 
