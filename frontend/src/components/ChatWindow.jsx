@@ -6,12 +6,16 @@ import {
 } from '../utils/socket';
 import MessageActions from './MessageActions';
 import CallScreen from './CallScreen';
+import VideoCallScreen from './VideoCallScreen';
 import IncomingCallPopup from './IncomingCallPopup';
 import CallHistory from './CallHistory';
 import MediaMessage from './MediaMessage';
-import { useWebRTC } from '../hooks/useWebRTC';
+import CallTypeSelector from './CallTypeSelector';
+import { useWebRTCVideo } from '../hooks/useWebRTCVideo';
 import '../styles/ChatWindow.css';
 import '../styles/MediaMessage.css';
+import '../styles/VideoCallScreen.css';
+import '../styles/CallTypeSelector.css';
 
 const URL_REGEX = /(?:https?:\/\/|www\.)[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_+.~#?&/=]*/gi;
 
@@ -60,16 +64,17 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
+  const [showCallTypeSelector, setShowCallTypeSelector] = useState(false);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
 
   const {
-    callStatus, incomingCall, incomingCaller, remoteAudioRef,
+    callStatus, incomingCall, incomingCaller, remoteAudioRef, remoteVideoRef, localVideoRef,
     startCall, acceptCall, rejectCall, endCall, handleRemoteEndCall,
     handleOffer, handleAnswer, handleIceCandidate, cleanup,
     callDuration, isMuted, speakerEnabled, networkQuality, networkWarning,
-    toggleMute, toggleSpeaker
-  } = useWebRTC(currentUser.username, selectedUser?.username);
+    toggleMute, toggleSpeaker, toggleVideo, isVideoEnabled, callType
+  } = useWebRTCVideo(currentUser.username, selectedUser?.username);
 
   const handleScroll = useCallback(() => {
     const container = messagesContainerRef.current;
@@ -156,7 +161,7 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
       }
     });
   }, [selectedUser, currentUser.username]);
-  useEffect(() => { return onCallUser((d) => handleOffer(d.offer, d.from)); }, [handleOffer]);
+  useEffect(() => { return onCallUser((d) => handleOffer(d.offer, d.from, d.callType || 'audio')); }, [handleOffer]);
   useEffect(() => { return onAnswerCall((d) => handleAnswer(d.answer)); }, [handleAnswer]);
   useEffect(() => { return onIceCandidate((d) => handleIceCandidate(d.candidate)); }, [handleIceCandidate]);
   useEffect(() => { return onEndCall(() => handleRemoteEndCall()); }, [handleRemoteEndCall]);
@@ -205,8 +210,18 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
   };
 
   const handleStartCall = () => {
-    if (selectedUser.isOnline) startCall();
+    if (selectedUser.isOnline) setShowCallTypeSelector(true);
     else alert(`${selectedUser.username} is offline`);
+  };
+
+  const handleSelectAudioCall = () => {
+    setShowCallTypeSelector(false);
+    startCall('audio');
+  };
+
+  const handleSelectVideoCall = () => {
+    setShowCallTypeSelector(false);
+    startCall('video');
   };
 
   const groupedMessages = useMemo(() => {
@@ -240,8 +255,10 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
 
   return (
     <div className="chat-window">
-      {callStatus && <CallScreen callStatus={callStatus} remoteUser={selectedUser.username} onEndCall={endCall} remoteAudioRef={remoteAudioRef} isMuted={isMuted} callDuration={callDuration} networkQuality={networkQuality} networkWarning={networkWarning} onToggleMute={toggleMute} onToggleSpeaker={toggleSpeaker} speakerEnabled={speakerEnabled} />}
-      {incomingCall && <IncomingCallPopup caller={incomingCaller} onAccept={acceptCall} onReject={rejectCall} />}
+      {callType === 'video' && callStatus && <VideoCallScreen callStatus={callStatus} remoteUser={selectedUser.username} onEndCall={endCall} remoteAudioRef={remoteAudioRef} remoteVideoRef={remoteVideoRef} localVideoRef={localVideoRef} isMuted={isMuted} callDuration={callDuration} networkQuality={networkQuality} networkWarning={networkWarning} onToggleMute={toggleMute} onToggleSpeaker={toggleSpeaker} onToggleVideo={toggleVideo} isVideoEnabled={isVideoEnabled} speakerEnabled={speakerEnabled} />}
+      {callType === 'audio' && callStatus && <CallScreen callStatus={callStatus} remoteUser={selectedUser.username} onEndCall={endCall} remoteAudioRef={remoteAudioRef} isMuted={isMuted} callDuration={callDuration} networkQuality={networkQuality} networkWarning={networkWarning} onToggleMute={toggleMute} onToggleSpeaker={toggleSpeaker} speakerEnabled={speakerEnabled} />}
+      {incomingCall && <IncomingCallPopup caller={incomingCaller} onAccept={acceptCall} onReject={rejectCall} callType={callType} />}
+      {showCallTypeSelector && <CallTypeSelector recipientName={selectedUser.username} onSelectAudio={handleSelectAudioCall} onSelectVideo={handleSelectVideoCall} onCancel={() => setShowCallTypeSelector(false)} />}
 
       {/* Chat header with back arrow */}
       <div className="chat-header">

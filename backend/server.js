@@ -286,17 +286,18 @@ io.on('connection', (socket) => {
 
   // WebRTC Call Events
   socket.on('call-user', (data) => {
-    const { to, from, offer } = data;
+    const { to, from, offer, callType = 'audio' } = data;
     const recipientSocketId = connectedUsers[to];
     
-    console.log(`📞 Call initiated: ${from} → ${to}`);
+    console.log(`📞 Call initiated: ${from} → ${to} (${callType})`);
     console.log(`   looking for user "${to}" in map:`, connectedUsers);
     console.log(`   Recipient socket ID: ${recipientSocketId}`);
     
     if (recipientSocketId) {
       io.to(recipientSocketId).emit('call-user', {
         from,
-        offer
+        offer,
+        callType
       });
       console.log(`   ✅ Call signal sent to ${to}`);
     } else {

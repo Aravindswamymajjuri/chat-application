@@ -235,9 +235,9 @@ export const onDeleteMessageForMe = (callback) => {
 };
 
 // WebRTC Call Events
-export const emitCallUser = (to, from, offer) => {
+export const emitCallUser = (to, from, offer, callType = 'audio') => {
   const socket = getSocket();
-  socket.emit('call-user', { to, from, offer });
+  socket.emit('call-user', { to, from, offer, callType });
 };
 
 export const onCallUser = (callback) => {

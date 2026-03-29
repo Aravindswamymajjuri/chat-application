@@ -1,0 +1,201 @@
+.call-type-selector-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999;
+  backdrop-filter: blur(4px);
+}
+
+.call-type-selector-modal {
+  background: white;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  width: 90%;
+  max-width: 360px;
+  position: relative;
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateY(50px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.modal-content {
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.close-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: transparent;
+  font-size: 28px;
+  color: #999;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  transition: all 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(0, 0, 0, 0.05);
+  color: #333;
+}
+
+.call-type-selector-modal h2 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #333;
+}
+
+.modal-subtitle {
+  margin: 0 0 24px 0;
+  font-size: 14px;
+  color: #999;
+}
+
+.call-type-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.call-type-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 20px;
+  border: 2px solid #e0e0e0;
+  border-radius: 12px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: center;
+}
+
+.call-type-btn:hover {
+  border-color: #128c7e;
+  background: rgba(18, 140, 126, 0.05);
+}
+
+.call-type-btn:active {
+  transform: scale(0.98);
+}
+
+.call-type-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0;
+}
+
+.audio-call-btn .call-type-icon {
+  background: rgba(52, 168, 224, 0.1);
+  color: #34a8e0;
+}
+
+.audio-call-btn:hover .call-type-icon {
+  background: rgba(52, 168, 224, 0.2);
+}
+
+.video-call-btn .call-type-icon {
+  background: rgba(18, 140, 126, 0.1);
+  color: #128c7e;
+}
+
+.video-call-btn:hover .call-type-icon {
+  background: rgba(18, 140, 126, 0.2);
+}
+
+.call-type-icon svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+}
+
+.call-type-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.call-type-desc {
+  font-size: 13px;
+  color: #999;
+}
+
+.cancel-btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  background: #f0f0f0;
+  color: #666;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cancel-btn:hover {
+  background: #e0e0e0;
+  color: #333;
+}
+
+.cancel-btn:active {
+  transform: scale(0.98);
+}
+
+/* Responsive design */
+@media (max-width: 480px) {
+  .call-type-selector-modal {
+    max-width: 85%;
+  }
+
+  .modal-content {
+    padding: 24px 16px;
+  }
+
+  .call-type-selector-modal h2 {
+    font-size: 18px;
+  }
+
+  .call-type-btn {
+    padding: 16px;
+    gap: 10px;
+  }
+
+  .call-type-icon {
+    width: 40px;
+    height: 40px;
+  }
+
+  .call-type-label {
+    font-size: 14px;
+  }
+}

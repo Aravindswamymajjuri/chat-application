@@ -72,6 +72,14 @@
   margin: 0;
 }
 
+.call-type-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 8px 0 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 .popup-actions {
   display: flex;
   gap: 32px;
