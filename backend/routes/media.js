@@ -13,21 +13,46 @@ let connectedUsers = null;
 
 // GridFS Bucket instance
 let gfs = null;
+let isGridFSReady = false;
 
 // Initialize GridFS Bucket when database is connected
 const initGridFS = () => {
-  const connection = mongoose.connection;
-  gfs = new GridFSBucket(connection.getClient().db('test'), {
-    bucketName: 'media'
-  });
-  console.log('✅ GridFS initialized for media storage in database');
+  try {
+    const connection = mongoose.connection;
+    
+    // Get database name from env or extract from URI
+    let dbName = process.env.MONGODB_DB;
+    if (!dbName) {
+      // Extract from MONGODB_URI: mongodb+srv://user:pass@host/dbname
+      const uri = process.env.MONGODB_URI;
+      const match = uri?.match(/\/([a-zA-Z0-9_-]+)(\?|$)/);
+      dbName = match ? match[1] : 'test';
+    }
+    
+    console.log(`📍 Initializing GridFS for database: ${dbName}`);
+    
+    const db = connection.getClient().db(dbName);
+    
+    gfs = new GridFSBucket(db, {
+      bucketName: 'media'
+    });
+    isGridFSReady = true;
+    console.log(`✅ GridFS initialized for media storage in database: ${dbName}`);
+  } catch (error) {
+    console.error('❌ Failed to initialize GridFS:', error.message);
+    // Retry after 5 seconds
+    setTimeout(initGridFS, 5000);
+  }
 };
 
 // Ensure GridFS is initialized when connection is ready
 if (mongoose.connection.readyState === 1) {
   initGridFS();
 } else {
-  mongoose.connection.once('open', initGridFS);
+  mongoose.connection.once('open', () => {
+    console.log('📡 MongoDB connected, initializing GridFS...');
+    initGridFS();
+  });
 }
 
 // Export function to set io and connectedUsers
@@ -116,9 +141,10 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     }
 
     // Ensure GridFS is initialized
-    if (!gfs) {
-      return res.status(500).json({ 
-        message: 'File storage system not ready. Please try again.' 
+    if (!gfs || !isGridFSReady) {
+      console.error('❌ GridFS not ready for upload. Connection state:', mongoose.connection.readyState);
+      return res.status(503).json({ 
+        message: 'File storage system not ready. Please try again in a moment.' 
       });
     }
 
@@ -240,11 +266,13 @@ router.get('/download/:fileId', async (req, res) => {
 
     // Validate fileId format
     if (!fileId.match(/^[0-9a-fA-F]{24}$/)) {
+      console.error(`❌ Invalid file ID format: ${fileId}`);
       return res.status(400).json({ message: 'Invalid file ID' });
     }
 
-    if (!gfs) {
-      return res.status(500).json({ 
+    if (!gfs || !isGridFSReady) {
+      console.error('❌ GridFS bucket not initialized');
+      return res.status(503).json({ 
         message: 'File storage system not ready' 
       });
     }
@@ -255,25 +283,32 @@ router.get('/download/:fileId', async (req, res) => {
     }).toArray();
 
     if (!files || files.length === 0) {
+      console.error(`❌ File not found: ${fileId}`);
       return res.status(404).json({ message: 'File not found' });
     }
 
     const file = files[0];
+    console.log(`📥 Downloading file: ${file.filename} (${file.length} bytes)`);
 
-    // Set proper headers
+    // Set proper headers for streaming media
     res.setHeader('Content-Type', file.metadata?.mimeType || 'application/octet-stream');
-    res.setHeader('Content-Disposition', `inline; filename="${file.filename}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(file.filename)}"`);
     res.setHeader('Content-Length', file.length);
-    res.setHeader('Cache-Control', 'public, max-age=31536000'); // 1 year cache
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('Accept-Ranges', 'bytes');
 
     // Stream file from GridFS
     const downloadStream = gfs.openDownloadStream(new mongoose.Types.ObjectId(fileId));
     
     downloadStream.on('error', (error) => {
-      console.error('Error downloading file:', error.message);
+      console.error('❌ Stream error downloading file:', error.message);
       if (!res.headersSent) {
         res.status(500).json({ message: 'Error downloading file' });
       }
+    });
+
+    downloadStream.on('end', () => {
+      console.log(`✅ File download completed: ${file.filename}`);
     });
 
     downloadStream.pipe(res);

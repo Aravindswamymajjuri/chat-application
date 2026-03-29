@@ -577,7 +577,7 @@ export const useWebRTCVideo = (currentUser, remoteUser, callType = 'audio') => {
     isVideoEnabled,
     networkQuality,
     networkWarning,
-    callType: callTypeRef.current,
+    callType: incomingCall ? incomingCallType : callTypeRef.current,
 
     // Refs
     remoteAudioRef,

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 
 const MediaMessage = ({ message, isOwn }) => {
   if (!message.media) return null;
@@ -9,6 +9,16 @@ const MediaMessage = ({ message, isOwn }) => {
   
   // Construct download URL using fileId (from GridFS)
   const fullMediaUrl = `${apiBaseUrl}/media/download/${fileId}`;
+
+  useEffect(() => {
+    console.log('📦 MediaMessage rendered:', {
+      mediaType,
+      fileId,
+      fileName,
+      apiBaseUrl,
+      fullMediaUrl
+    });
+  }, [mediaType, fileId, fileName, apiBaseUrl, fullMediaUrl]);
 
   const formatFileSize = (kb) => {
     if (kb < 1024) return `${kb} KB`;
@@ -69,8 +79,10 @@ const MediaMessage = ({ message, isOwn }) => {
               src={fullMediaUrl}
               alt="Photo"
               className="photo-preview"
+              onLoad={() => console.log('✅ Photo loaded:', fullMediaUrl)}
               onError={(e) => {
-                e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"%3E%3Ctext x="50%25" y="50%25" dy=".3em" text-anchor="middle" fill="%23999"%3EImage not found%3C/text%3E%3C/svg%3E';
+                console.error('❌ Photo failed to load:', fullMediaUrl);
+                e.target.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"%3E%3Crect fill="%23f0f0f0" width="200" height="200"/%3E%3Ctext x="50%25" y="50%25" dy=".3em" text-anchor="middle" fill="%23999" font-size="16"%3EImage not found%3C/text%3E%3C/svg%3E';
               }}
             />
             <button 
