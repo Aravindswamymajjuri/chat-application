@@ -30,14 +30,15 @@ exports.getLastMessages = async (req, res) => {
         text: { $first: '$text' },
         sender: { $first: '$sender' },
         timestamp: { $first: '$timestamp' },
-        status: { $first: '$status' }
+        status: { $first: '$status' },
+        media: { $first: '$media' }
       }}
     ]);
 
-    // Convert to { username: { text, sender, timestamp, status } }
+    // Convert to { username: { text, sender, timestamp, status, media } }
     const result = {};
     lastMessages.forEach(m => {
-      result[m._id] = { text: m.text, sender: m.sender, timestamp: m.timestamp, status: m.status };
+      result[m._id] = { text: m.text, sender: m.sender, timestamp: m.timestamp, status: m.status, media: m.media || null };
     });
 
     res.json(result);
@@ -86,7 +87,8 @@ exports.getMessages = async (req, res) => {
         timestamp: msg.timestamp,
         status: msg.status || 'sent',
         deletedFor: msg.deletedFor || [],
-        replyTo: msg.replyTo || null
+        replyTo: msg.replyTo || null,
+        media: msg.media || null
       };
 
       if (msg.deletedFor && msg.deletedFor.includes(sender)) {

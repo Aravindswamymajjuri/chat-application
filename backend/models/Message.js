@@ -11,7 +11,7 @@ const messageSchema = new mongoose.Schema({
   },
   text: {
     type: String,
-    required: true
+    default: ''
   },
   timestamp: {
     type: Date,
@@ -30,6 +30,21 @@ const messageSchema = new mongoose.Schema({
     messageId: mongoose.Schema.Types.ObjectId,
     text: String,
     sender: String
+  },
+  // Media support
+  media: {
+    type: {
+      mediaType: {
+        type: String,
+        enum: ['photo', 'video', 'document', null],
+        default: null
+      },
+      fileId: mongoose.Schema.Types.ObjectId,  // GridFS file ID
+      fileName: String,       // Original file name
+      fileSizeKB: Number,     // File size in KB
+      mimeType: String        // MIME type for proper display
+    },
+    default: null
   }
 });
 

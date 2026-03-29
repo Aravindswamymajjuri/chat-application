@@ -1,13 +1,15 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { chatAPI, notificationAPI } from '../utils/api';
+import { chatAPI, notificationAPI, mediaAPI } from '../utils/api';
 import { emitTyping, emitStopTyping } from '../utils/socket';
 import ReplyPreview from './ReplyPreview';
+import MediaActions from './MediaActions';
 import '../styles/MessageInput.css';
 
 const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, onReplyCancel }) => {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(null);
   const typingTimeoutRef = React.useRef(null);
   const inputRef = useRef(null);
 
@@ -50,7 +52,6 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
       const saveResponse = await chatAPI.saveMessage(currentUser.username, selectedUser.username, messageText, replyData);
       const savedMessage = saveResponse.data?.data;
 
-      // 1. Add message to state FIRST (so status updates can find it)
       const messageForState = savedMessage || {
         sender: currentUser.username,
         receiver: selectedUser.username,
@@ -61,7 +62,6 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
       };
       onMessageSent?.(messageForState);
 
-      // 2. Send push notification (fire-and-forget, don't block)
       notificationAPI.sendNotificationByUsername(
         selectedUser.username,
         currentUser.username,
@@ -73,8 +73,59 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
       setText(messageText);
     } finally {
       setLoading(false);
-      // Delay focus so React re-enables the input first
       setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  };
+
+  const handleMediaUpload = async (file, mediaType) => {
+    if (!file) return;
+
+    // Validate file size
+    const maxSizes = { photo: 5, video: 50, document: 20 };
+    const maxSizeMB = maxSizes[mediaType];
+    if (file.size > maxSizeMB * 1024 * 1024) {
+      alert(`File too large! Maximum size for ${mediaType}s is ${maxSizeMB}MB`);
+      return;
+    }
+
+    setLoading(true);
+    setUploadProgress(0);
+
+    try {
+      const caption = text.trim() || `📎 ${file.name}`;
+      const response = await mediaAPI.uploadMedia(
+        file,
+        currentUser.username,
+        selectedUser.username,
+        mediaType,
+        caption
+      );
+
+      const savedMedia = response.data?.data;
+      if (savedMedia) {
+        onMessageSent?.(savedMedia);
+        setText('');
+      }
+
+      // Send notification with media indicator
+      const mediaEmoji = {
+        photo: '📸',
+        video: '🎥',
+        document: '📄'
+      };
+      notificationAPI.sendNotificationByUsername(
+        selectedUser.username,
+        currentUser.username,
+        `${mediaEmoji[mediaType]} Sent you a ${mediaType}`
+      ).catch(() => {});
+
+      setUploadProgress(null);
+    } catch (error) {
+      console.error('Media upload error:', error);
+      alert(`Failed to upload ${mediaType}: ${error.response?.data?.message || error.message}`);
+      setUploadProgress(null);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -83,7 +134,19 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
       {replyingTo && (
         <ReplyPreview replyTo={replyingTo} onCancel={onReplyCancel} />
       )}
+      {uploadProgress !== null && (
+        <div className="upload-progress">
+          <div className="progress-bar" style={{ width: `${uploadProgress}%` }}></div>
+          <span>{uploadProgress}%</span>
+        </div>
+      )}
       <form className="message-input" onSubmit={handleSendMessage}>
+        <MediaActions
+          onPhotoSelect={(file) => handleMediaUpload(file, 'photo')}
+          onVideoSelect={(file) => handleMediaUpload(file, 'video')}
+          onDocumentSelect={(file) => handleMediaUpload(file, 'document')}
+          isLoading={loading}
+        />
         <input
           ref={inputRef}
           type="text"

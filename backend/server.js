@@ -63,6 +63,7 @@ const usersRoutes = require('./routes/users');
 const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notification');
 const callHistoryRoutes = require('./routes/callHistory');
+const mediaRoutes = require('./routes/media');
 const chatController = require('./controllers/chatController');
 const authController = require('./controllers/authController');
 
@@ -72,12 +73,16 @@ const connectedUsers = {};
 // Initialize controllers with io instance and connectedUsers map for real-time updates
 chatController.setIO(io, connectedUsers);
 authController.setIO(io, connectedUsers);
+mediaRoutes.setIO(io, connectedUsers);
+
+// Note: No static file serving needed - files are now stored in MongoDB GridFS
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/calls', callHistoryRoutes);
+app.use('/api/media', mediaRoutes);
 
 // Basic route
 app.get('/', (req, res) => {

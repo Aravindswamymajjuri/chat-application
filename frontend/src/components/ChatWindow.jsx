@@ -8,8 +8,10 @@ import MessageActions from './MessageActions';
 import CallScreen from './CallScreen';
 import IncomingCallPopup from './IncomingCallPopup';
 import CallHistory from './CallHistory';
+import MediaMessage from './MediaMessage';
 import { useWebRTC } from '../hooks/useWebRTC';
 import '../styles/ChatWindow.css';
+import '../styles/MediaMessage.css';
 
 const URL_REGEX = /(?:https?:\/\/|www\.)[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_+.~#?&/=]*/gi;
 
@@ -307,26 +309,42 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
                 }
                 const msg = item.data;
                 const isSent = msg.sender === currentUser.username;
+                
                 return (
                   <div key={item.key} className={`message ${isSent ? 'sent' : 'received'} ${msg.deletedForMe ? 'deleted' : ''}`} onClick={() => setActiveMessageId(activeMessageId === msg._id ? null : msg._id)}>
-                    <div className="message-bubble">
-                      {msg.replyTo && (
-                        <div className="message-reply-quote">
-                          <div className="reply-quote-sender">{msg.replyTo.sender}</div>
-                          <div className="reply-quote-text">{msg.replyTo.text}</div>
+                    {msg.media ? (
+                      <>
+                        <MediaMessage message={msg} isOwn={isSent} />
+                        <div className="message-footer" style={{ paddingLeft: '12px', marginTop: '4px' }}>
+                          <span className="message-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          {isSent && (
+                            <span className={`tick-icon ${msg.status}`}>
+                              {msg.status === 'sent' && <SingleTick />}
+                              {(msg.status === 'delivered' || msg.status === 'seen') && <DoubleTick />}
+                            </span>
+                          )}
                         </div>
-                      )}
-                      <div className="message-text">{linkifyText(msg.text)}</div>
-                      <div className="message-footer">
-                        <span className="message-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                        {isSent && (
-                          <span className={`tick-icon ${msg.status}`}>
-                            {msg.status === 'sent' && <SingleTick />}
-                            {(msg.status === 'delivered' || msg.status === 'seen') && <DoubleTick />}
-                          </span>
+                      </>
+                    ) : (
+                      <div className="message-bubble">
+                        {msg.replyTo && (
+                          <div className="message-reply-quote">
+                            <div className="reply-quote-sender">{msg.replyTo.sender}</div>
+                            <div className="reply-quote-text">{msg.replyTo.text}</div>
+                          </div>
                         )}
+                        <div className="message-text">{linkifyText(msg.text)}</div>
+                        <div className="message-footer">
+                          <span className="message-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          {isSent && (
+                            <span className={`tick-icon ${msg.status}`}>
+                              {msg.status === 'sent' && <SingleTick />}
+                              {(msg.status === 'delivered' || msg.status === 'seen') && <DoubleTick />}
+                            </span>
+                          )}
+                        </div>
                       </div>
-                    </div>
+                    )}
                     {activeMessageId === msg._id && !msg.deletedForMe && (
                       <MessageActions messageId={msg._id} message={msg} currentUsername={currentUser.username} isOwnMessage={isSent} onDelete={handleDeleteMessage} onReply={handleReplyClick} onClose={() => setActiveMessageId(null)} />
                     )}

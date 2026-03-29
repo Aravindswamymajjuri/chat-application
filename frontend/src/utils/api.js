@@ -65,6 +65,23 @@ export const chatAPI = {
     axios.post(`${API_BASE_URL}/chat/messages/delete-for-me`, { messageId, username })
 };
 
+export const mediaAPI = {
+  uploadMedia: (file, sender, receiver, mediaType, text = '') => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('sender', sender);
+    formData.append('receiver', receiver);
+    formData.append('mediaType', mediaType);
+    formData.append('text', text);
+
+    return axios.post(`${API_BASE_URL}/media/upload`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data'
+      }
+    });
+  }
+};
+
 export const notificationAPI = {
   sendNotification: (receiverId, title, body) =>
     axios.post(`${API_BASE_URL}/notifications/send`, { receiverId, title, body }),
