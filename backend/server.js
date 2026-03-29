@@ -287,68 +287,52 @@ io.on('connection', (socket) => {
     socket.broadcast.emit('user_offline', { username: data.username });
   });
 
-  // WebRTC Call Events
+  // WebRTC Call Events — use both direct socket + room for reliable delivery
   socket.on('call-user', (data) => {
     const { to, from, offer, callType = 'audio' } = data;
     const recipientSocketId = connectedUsers[to];
-    
-    console.log(`📞 Call initiated: ${from} → ${to} (${callType})`);
-    console.log(`   looking for user "${to}" in map:`, connectedUsers);
-    console.log(`   Recipient socket ID: ${recipientSocketId}`);
-    
+
+    console.log(`📞 Call: ${from} → ${to} (${callType})`);
+
     if (recipientSocketId) {
-      io.to(recipientSocketId).emit('call-user', {
-        from,
-        offer,
-        callType
-      });
+      const payload = { from, offer, callType };
+      io.to(recipientSocketId).emit('call-user', payload);
+      io.to(`user_${to}`).emit('call-user', payload);
       console.log(`   ✅ Call signal sent to ${to}`);
     } else {
-      // Notify caller that recipient is offline
-      console.log(`   ❌ User ${to} not found in connectedUsers map`);
-      io.to(socket.id).emit('user-offline', {
-        message: `${to} is offline`
-      });
+      console.log(`   ❌ User ${to} not found`);
+      io.to(socket.id).emit('user-offline', { message: `${to} is offline` });
     }
   });
 
   socket.on('answer-call', (data) => {
     const { to, from, answer } = data;
     const callerSocketId = connectedUsers[to];
-    
     console.log(`✅ Call answered: ${from} → ${to}`);
-    
-    if (callerSocketId) {
-      io.to(callerSocketId).emit('answer-call', {
-        from,
-        answer
-      });
-    }
+
+    const payload = { from, answer };
+    if (callerSocketId) io.to(callerSocketId).emit('answer-call', payload);
+    io.to(`user_${to}`).emit('answer-call', payload);
   });
 
   socket.on('ice-candidate', (data) => {
     const { to, candidate } = data;
+    if (!candidate) return;
     const targetSocketId = connectedUsers[to];
-    
-    if (targetSocketId && candidate) {
-      io.to(targetSocketId).emit('ice-candidate', {
-        candidate
-      });
-    }
+
+    const payload = { candidate };
+    if (targetSocketId) io.to(targetSocketId).emit('ice-candidate', payload);
+    io.to(`user_${to}`).emit('ice-candidate', payload);
   });
 
   socket.on('end-call', (data) => {
     const { to, from, reason } = data;
-    const targetSocketId = connectedUsers[to];
-    
     console.log(`📵 Call ended: ${from} → ${to}${reason ? ` (${reason})` : ''}`);
-    
-    if (targetSocketId) {
-      io.to(targetSocketId).emit('end-call', {
-        from,
-        reason
-      });
-    }
+
+    const payload = { from, reason };
+    const targetSocketId = connectedUsers[to];
+    if (targetSocketId) io.to(targetSocketId).emit('end-call', payload);
+    io.to(`user_${to}`).emit('end-call', payload);
   });
 });
 

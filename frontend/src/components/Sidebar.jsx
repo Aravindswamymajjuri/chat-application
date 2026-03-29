@@ -46,6 +46,31 @@ const Sidebar = ({ currentUser, selectedUser, onSelectUser, users, setUsers, unr
 
   const getInitial = (name) => name ? name.charAt(0).toUpperCase() : '?';
 
+  const formatMsgTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    const oneDay = 86400000;
+
+    // Today — show time
+    if (date.toDateString() === now.toDateString()) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    // Yesterday
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (date.toDateString() === yesterday.toDateString()) {
+      return 'Yesterday';
+    }
+    // Within last 7 days — show day name
+    if (diff < 7 * oneDay) {
+      return date.toLocaleDateString([], { weekday: 'short' });
+    }
+    // Older — show date
+    return date.toLocaleDateString([], { day: '2-digit', month: '2-digit', year: '2-digit' });
+  };
+
   return (
     <div className="sidebar">
       <div className="search-wrapper">
@@ -79,11 +104,16 @@ const Sidebar = ({ currentUser, selectedUser, onSelectUser, users, setUsers, unr
               >
                 <div className="user-avatar">
                   {getInitial(user.username)}
-                  {user.isOnline && <div className="user-avatar-online-dot" />}
+                  <div className={`user-avatar-status-dot ${user.isOnline ? 'online' : 'offline'}`} />
                 </div>
                 <div className="user-item-content">
                   <div className="user-item-top">
                     <span className="user-name">{user.username}</span>
+                    {lastMessages?.[user.username]?.timestamp && (
+                      <span className={`user-msg-time${unreadCount > 0 ? ' unread' : ''}`}>
+                        {formatMsgTime(lastMessages[user.username].timestamp)}
+                      </span>
+                    )}
                   </div>
                   <div className="user-item-bottom">
                     {isUserTyping ? (
@@ -110,7 +140,7 @@ const Sidebar = ({ currentUser, selectedUser, onSelectUser, users, setUsers, unr
       <div className="sidebar-current-user">
         <div className="sidebar-current-user-avatar">
           {getInitial(currentUser.username)}
-          <div className="user-avatar-online-dot" />
+          <div className="user-avatar-status-dot online" />
         </div>
         <span className="sidebar-current-user-name">{currentUser.username}</span>
       </div>

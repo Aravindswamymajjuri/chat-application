@@ -7,10 +7,10 @@ const STUN_SERVERS = [
   'stun:stun1.l.google.com:19302',
   'stun:stun2.l.google.com:19302',
   'stun:stun3.l.google.com:19302',
-  'stun:stun4.l.google.com:19302',
-  'stun:stunserver.org:3478'
+  'stun:stun4.l.google.com:19302'
 ];
 
+// Metered TURN servers (free tier — reliable for small apps)
 const TURN_SERVERS = [
   {
     urls: 'turn:openrelay.metered.ca:80',
@@ -29,421 +29,212 @@ const TURN_SERVERS = [
   }
 ];
 
-export const useWebRTCVideo = (currentUser, remoteUser, callType = 'audio') => {
-  // Call states
-  const [callStatus, setCallStatus] = useState(null); // null, 'calling', 'ringing', 'connected', 'ended'
+export const useWebRTCVideo = (currentUser, remoteUser) => {
+  const [callStatus, setCallStatus] = useState(null);
   const [incomingCall, setIncomingCall] = useState(false);
   const [incomingCaller, setIncomingCaller] = useState(null);
-  const [incomingCallType, setIncomingCallType] = useState('audio'); // 'audio' or 'video'
+  const [incomingCallType, setIncomingCallType] = useState('audio');
   const [callDuration, setCallDuration] = useState(0);
   const [isMuted, setIsMuted] = useState(false);
   const [speakerEnabled, setSpeakerEnabled] = useState(false);
-  const [isVideoEnabled, setIsVideoEnabled] = useState(callType === 'video');
+  const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [networkQuality, setNetworkQuality] = useState('good');
   const [networkWarning, setNetworkWarning] = useState(null);
 
-  // Refs for call management
   const callRemoteUserRef = useRef(null);
-  const callTypeRef = useRef(callType); // Track which type of call we're in
-  
-  // Peer connection refs
+  const callTypeRef = useRef('audio');
   const peerConnectionRef = useRef(null);
   const localStreamRef = useRef(null);
   const remoteStreamRef = useRef(null);
   const remoteAudioRef = useRef(null);
   const remoteVideoRef = useRef(null);
   const localVideoRef = useRef(null);
-  const iceCandidatesRef = useRef([]);
-  
-  // Timer and stats refs
+  const iceCandidatesRef = useRef([]); // Buffer for early ICE candidates
+  const remoteDescSetRef = useRef(false); // Track if remote description is set
+
   const callStartTimeRef = useRef(null);
   const timerIntervalRef = useRef(null);
   const statsIntervalRef = useRef(null);
   const networkWarningTimeoutRef = useRef(null);
-  const hasAttachedStreamsRef = useRef(false);
+  const callTimeoutRef = useRef(null);
 
   const speakerEnabledRef = useRef(speakerEnabled);
   speakerEnabledRef.current = speakerEnabled;
 
-  // Detect mobile
   const isMobile = /iPhone|iPad|Android|webOS/i.test(navigator.userAgent);
   const EARPIECE_VOLUME = isMobile ? 0.6 : 0.3;
   const SPEAKER_VOLUME = 1.0;
 
-  // Attach remote streams to elements
+  // Attach remote streams to media elements
   const attachRemoteStreams = useCallback(() => {
     const video = remoteVideoRef.current;
     const audio = remoteAudioRef.current;
     const stream = remoteStreamRef.current;
-
     if (!stream) return;
 
-    console.log('🎬 Attaching remote streams...');
-
-    // Attach video if video call
-    if (video && callTypeRef.current === 'video') {
+    if (callTypeRef.current === 'video' && video) {
       if (video.srcObject !== stream) {
-        console.log('📹 Attaching remote video stream');
         video.srcObject = stream;
       }
-
-      if (video.paused) {
-        video.play().catch(err => console.error('Video play error:', err));
-      }
+      if (video.paused) video.play().catch(() => {});
     }
 
-    // For video calls, audio comes from video element
-    // For audio calls, attach to audio element
-    if (callTypeRef.current === 'audio' && audio) {
+    if (audio) {
       if (audio.srcObject !== stream) {
-        console.log('🔊 Attaching remote audio stream');
         audio.srcObject = stream;
       }
-
       audio.muted = false;
       audio.volume = speakerEnabledRef.current ? SPEAKER_VOLUME : EARPIECE_VOLUME;
-
       if (audio.paused) {
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => console.log('✅ Remote audio playing'))
-            .catch(err => {
-              console.error('❌ Audio play error:', err);
-              window.__retryAudioPlay = () => {
-                if (audio && audio.paused && remoteStreamRef.current) {
-                  audio.srcObject = remoteStreamRef.current;
-                  audio.play().catch(e => console.error('Still failed:', e));
-                }
-              };
-            });
-        }
+        audio.play().catch(() => {
+          // Autoplay blocked — will retry on user interaction
+          window.__retryAudioPlay = () => {
+            if (audio && remoteStreamRef.current) {
+              audio.srcObject = remoteStreamRef.current;
+              audio.play().catch(() => {});
+            }
+          };
+        });
       }
     }
   }, [EARPIECE_VOLUME]);
+
+  // Flush buffered ICE candidates after remote description is set
+  const flushBufferedCandidates = useCallback(async () => {
+    const pc = peerConnectionRef.current;
+    if (!pc || !remoteDescSetRef.current) return;
+
+    const buffered = iceCandidatesRef.current;
+    iceCandidatesRef.current = [];
+
+    for (const candidate of buffered) {
+      try {
+        await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        // Ignore — candidate may be stale
+      }
+    }
+    if (buffered.length > 0) {
+      console.log(`✅ Flushed ${buffered.length} buffered ICE candidates`);
+    }
+  }, []);
 
   // Create peer connection
   const createPeerConnection = useCallback(() => {
     if (peerConnectionRef.current) return peerConnectionRef.current;
 
-    const iceServers = [
-      ...STUN_SERVERS.map(url => ({ urls: url })),
-      ...TURN_SERVERS
-    ];
-
     const config = {
-      iceServers: iceServers,
+      iceServers: [
+        ...STUN_SERVERS.map(url => ({ urls: url })),
+        ...TURN_SERVERS
+      ],
       iceCandidatePoolSize: 10
     };
 
     console.log('🔧 Creating peer connection for', callTypeRef.current, 'call');
+    const pc = new RTCPeerConnection(config);
 
-    const peerConnection = new RTCPeerConnection(config);
-
-    // ICE candidates
-    peerConnection.addEventListener('icecandidate', (event) => {
+    pc.addEventListener('icecandidate', (event) => {
       if (event.candidate) {
         const target = callRemoteUserRef.current || incomingCaller || remoteUser;
         if (target) {
-          getSocket().emit('ice-candidate', {
-            to: target,
-            candidate: event.candidate
-          });
+          getSocket().emit('ice-candidate', { to: target, candidate: event.candidate });
         }
       }
     });
 
-    // Remote tracks
-    peerConnection.addEventListener('track', (event) => {
+    pc.addEventListener('track', (event) => {
       console.log('🎥 Remote track received:', event.track.kind);
-      
-      if (event.streams && event.streams.length > 0) {
+      if (event.streams?.[0]) {
         remoteStreamRef.current = event.streams[0];
       } else {
-        if (!remoteStreamRef.current) {
-          remoteStreamRef.current = new MediaStream();
-        }
+        if (!remoteStreamRef.current) remoteStreamRef.current = new MediaStream();
         remoteStreamRef.current.addTrack(event.track);
       }
-
       attachRemoteStreams();
-
-      if (!callStatus || callStatus !== 'connected') {
-        setCallStatus('connected');
-      }
+      setCallStatus('connected');
     });
 
-    // Connection state
-    peerConnection.addEventListener('connectionstatechange', () => {
-      console.log('🔌 Connection state:', peerConnection.connectionState);
-      
-      if (peerConnection.connectionState === 'failed' ||
-          peerConnection.connectionState === 'disconnected' ||
-          peerConnection.connectionState === 'closed') {
+    pc.addEventListener('connectionstatechange', () => {
+      console.log('🔌 Connection state:', pc.connectionState);
+      if (pc.connectionState === 'failed' || pc.connectionState === 'closed') {
         endCall();
       }
     });
 
-    peerConnectionRef.current = peerConnection;
-    return peerConnection;
-  }, [remoteUser, incomingCaller, callStatus]);
-
-  // Get local streams
-  const getLocalStream = useCallback(async () => {
-    try {
-      if (localStreamRef.current) return localStreamRef.current;
-
-      const constraints = {
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true
-        },
-        video: callTypeRef.current === 'video' ? {
-          width: { ideal: 1280 },
-          height: { ideal: 720 },
-          facingMode: 'user'
-        } : false
-      };
-
-      console.log(`📱 Requesting media for ${callTypeRef.current} call...`);
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
-
-      console.log(`✅ Got ${callTypeRef.current} stream with ${stream.getTracks().length} tracks`);
-
-      localStreamRef.current = stream;
-
-      // Attach local video to ref if video call
-      if (callTypeRef.current === 'video' && localVideoRef.current) {
-        console.log('📹 Attaching local video stream');
-        localVideoRef.current.srcObject = stream;
-        localVideoRef.current.play().catch(err => console.error('Local video play error:', err));
+    pc.addEventListener('iceconnectionstatechange', () => {
+      console.log('🧊 ICE state:', pc.iceConnectionState);
+      if (pc.iceConnectionState === 'failed') {
+        console.error('❌ ICE connection failed — network issue');
+        endCall();
       }
+    });
 
-      // Add tracks to peer connection
-      const peerConnection = createPeerConnection();
-      stream.getTracks().forEach((track) => {
-        peerConnection.addTrack(track, stream);
-        console.log(`✅ Added ${track.kind} to peer connection`);
-      });
+    peerConnectionRef.current = pc;
+    return pc;
+  }, [remoteUser, incomingCaller, attachRemoteStreams]);
 
-      return stream;
-    } catch (error) {
-      console.error('❌ Error getting media:', error);
-      setCallStatus('ended');
-      throw error;
+  // Get local media stream
+  const getLocalStream = useCallback(async (type) => {
+    if (localStreamRef.current) return localStreamRef.current;
+
+    const useType = type || callTypeRef.current;
+    const constraints = {
+      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+      video: useType === 'video' ? { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } : false
+    };
+
+    console.log(`📱 Requesting ${useType} media...`);
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    console.log(`✅ Got stream with ${stream.getTracks().length} tracks`);
+
+    localStreamRef.current = stream;
+
+    if (useType === 'video' && localVideoRef.current) {
+      localVideoRef.current.srcObject = stream;
+      localVideoRef.current.play().catch(() => {});
     }
+
+    const pc = createPeerConnection();
+    stream.getTracks().forEach((track) => {
+      pc.addTrack(track, stream);
+    });
+
+    return stream;
   }, [createPeerConnection]);
 
-  // Toggle video during call
+  // Toggle video
   const toggleVideo = useCallback(() => {
     if (!localStreamRef.current) return;
-
     const videoTracks = localStreamRef.current.getVideoTracks();
     if (videoTracks.length === 0) return;
-
     const shouldEnable = !isVideoEnabled;
-    videoTracks.forEach(track => {
-      track.enabled = shouldEnable;
-    });
-
+    videoTracks.forEach(track => { track.enabled = shouldEnable; });
     setIsVideoEnabled(shouldEnable);
-    console.log(`📹 Video ${shouldEnable ? 'enabled' : 'disabled'}`);
   }, [isVideoEnabled]);
 
-  // Create offer
-  const createOffer = useCallback(async () => {
-    try {
-      console.log('📋 Creating offer...');
-      await getLocalStream();
-      const peerConnection = createPeerConnection();
-
-      const offer = await peerConnection.createOffer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: callTypeRef.current === 'video'
-      });
-
-      await peerConnection.setLocalDescription(offer);
-
-      console.log('✅ Offer created');
-      setCallStatus('calling');
-
-      return offer;
-    } catch (error) {
-      console.error('❌ Error creating offer:', error);
-      setCallStatus('ended');
-      throw error;
-    }
-  }, [getLocalStream, createPeerConnection]);
-
-  // Create answer
-  const createAnswer = useCallback(async () => {
-    try {
-      console.log('📋 Creating answer...');
-      await getLocalStream();
-
-      const peerConnection = peerConnectionRef.current;
-      if (!peerConnection) throw new Error('No peer connection');
-
-      const answer = await peerConnection.createAnswer({
-        offerToReceiveAudio: true,
-        offerToReceiveVideo: callTypeRef.current === 'video'
-      });
-
-      await peerConnection.setLocalDescription(answer);
-
-      console.log('✅ Answer created');
-      return answer;
-    } catch (error) {
-      console.error('❌ Error creating answer:', error);
-      setCallStatus('ended');
-      throw error;
-    }
-  }, [getLocalStream]);
-
-  // Handle offer
-  const handleOffer = useCallback(async (offer, from, type = 'audio') => {
-    try {
-      console.log(`📨 Offer received from ${from} (${type} call)`);
-      callRemoteUserRef.current = from;
-      callTypeRef.current = type;
-      setIncomingCallType(type);
-
-      await getLocalStream();
-      const peerConnection = createPeerConnection();
-
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-
-      setIncomingCall(true);
-      setIncomingCaller(from);
-      setCallStatus('ringing');
-    } catch (error) {
-      console.error('❌ Error handling offer:', error);
-    }
-  }, [getLocalStream, createPeerConnection]);
-
-  // Handle answer
-  const handleAnswer = useCallback(async (answer) => {
-    try {
-      const peerConnection = peerConnectionRef.current;
-      if (!peerConnection) return;
-
-      console.log('📩 Answer received');
-      await peerConnection.setRemoteDescription(new RTCSessionDescription(answer));
-
-      // Start timer when answer is received
-      if (callStartTimeRef.current === null) {
-        callStartTimeRef.current = Date.now();
-        setCallDuration(0);
-
-        timerIntervalRef.current = setInterval(() => {
-          const elapsed = Math.floor((Date.now() - callStartTimeRef.current) / 1000);
-          setCallDuration(elapsed);
-        }, 1000);
-
-        statsIntervalRef.current = setInterval(monitorNetworkQuality, 2000);
-      }
-    } catch (error) {
-      console.error('❌ Error handling answer:', error);
-    }
-  }, []);
-
-  // Handle ICE candidate
-  const handleIceCandidate = useCallback(async (candidate) => {
-    try {
-      const peerConnection = peerConnectionRef.current;
-      if (!peerConnection || !candidate) return;
-
-      await peerConnection.addIceCandidate(new RTCIceCandidate(candidate));
-      console.log('✅ ICE candidate added');
-    } catch (error) {
-      if (error.code !== 11) {
-        console.error('❌ Error adding ICE candidate:', error);
-      }
-    }
-  }, []);
-
-  // Monitor network quality
-  const monitorNetworkQuality = useCallback(() => {
-    const peerConnection = peerConnectionRef.current;
-    if (!peerConnection) return;
-
-    peerConnection.getStats().then((stats) => {
-      let quality = 'excellent';
-      let warning = null;
-
-      stats.forEach((report) => {
-        if (report.type === 'inbound-rtp' && report.kind === 'audio') {
-          const packetLossPercent = report.packetsReceived > 0 
-            ? (report.packetsLost / (report.packetsLost + report.packetsReceived)) * 100
-            : 0;
-
-          if (packetLossPercent > 5) {
-            quality = 'poor';
-            warning = '⚠️ Poor network - call may be affected';
-          } else if (packetLossPercent > 2) {
-            quality = 'fair';
-          } else if (packetLossPercent > 1) {
-            quality = 'good';
-          }
-        }
-      });
-
-      setNetworkQuality(quality);
-
-      if (warning && !networkWarning) {
-        setNetworkWarning(warning);
-        clearTimeout(networkWarningTimeoutRef.current);
-        networkWarningTimeoutRef.current = setTimeout(() => {
-          setNetworkWarning(null);
-        }, 5000);
-      }
-    });
-  }, [networkWarning]);
-
-  // Cleanup
-  const cleanup = useCallback(() => {
-    console.log('🧹 Cleaning up...');
-
-    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
-    if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
-    if (networkWarningTimeoutRef.current) clearTimeout(networkWarningTimeoutRef.current);
-
-    callStartTimeRef.current = null;
-    callRemoteUserRef.current = null;
-    remoteStreamRef.current = null;
-    hasAttachedStreamsRef.current = false;
-
-    if (peerConnectionRef.current) {
-      peerConnectionRef.current.close();
-      peerConnectionRef.current = null;
-    }
-
-    if (localStreamRef.current) {
-      localStreamRef.current.getTracks().forEach((track) => track.stop());
-      localStreamRef.current = null;
-    }
-
-    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
-    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
-
-    console.log('✅ Cleanup complete');
-  }, []);
-
-  // Start call
+  // Start call (caller side)
   const startCall = useCallback(async (type = 'audio') => {
     try {
       console.log(`📞 Starting ${type} call to ${remoteUser}...`);
+      if (!remoteUser) return;
+
       callRemoteUserRef.current = remoteUser;
       callTypeRef.current = type;
+      remoteDescSetRef.current = false;
+      iceCandidatesRef.current = [];
       setIsVideoEnabled(type === 'video');
 
-      if (!remoteUser) {
-        console.error('❌ No remote user');
-        return;
-      }
+      await getLocalStream(type);
+      const pc = createPeerConnection();
 
-      const offer = await createOffer();
+      const offer = await pc.createOffer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: type === 'video'
+      });
+      await pc.setLocalDescription(offer);
+
+      setCallStatus('calling');
 
       getSocket().emit('call-user', {
         to: remoteUser,
@@ -452,36 +243,72 @@ export const useWebRTCVideo = (currentUser, remoteUser, callType = 'audio') => {
         callType: type
       });
 
-      console.log('📤 Call emitted');
+      // 60s timeout for unanswered calls
+      callTimeoutRef.current = setTimeout(() => {
+        if (!remoteDescSetRef.current) {
+          console.log('⏰ Call timeout — no answer');
+          endCall();
+        }
+      }, 60000);
+
     } catch (error) {
       console.error('❌ Error starting call:', error);
       setCallStatus('ended');
     }
-  }, [remoteUser, currentUser, createOffer]);
+  }, [remoteUser, currentUser, getLocalStream, createPeerConnection]);
 
-  // Accept call
+  // Handle incoming offer (receiver side) — DON'T request media yet, just show popup
+  const handleOffer = useCallback(async (offer, from, type = 'audio') => {
+    try {
+      console.log(`📨 Incoming ${type} call from ${from}`);
+      callRemoteUserRef.current = from;
+      callTypeRef.current = type;
+      remoteDescSetRef.current = false;
+      iceCandidatesRef.current = [];
+      setIncomingCallType(type);
+      setIncomingCall(true);
+      setIncomingCaller(from);
+      setCallStatus('ringing');
+
+      // Create peer connection and set remote description (no media yet)
+      const pc = createPeerConnection();
+      await pc.setRemoteDescription(new RTCSessionDescription(offer));
+      remoteDescSetRef.current = true;
+
+      // Flush any ICE candidates that arrived before remote desc was set
+      await flushBufferedCandidates();
+
+    } catch (error) {
+      console.error('❌ Error handling offer:', error);
+      setCallStatus(null);
+    }
+  }, [createPeerConnection, flushBufferedCandidates]);
+
+  // Accept call — NOW request media and send answer
   const acceptCall = useCallback(async () => {
     try {
       setIncomingCall(false);
 
-      const peerConnection = peerConnectionRef.current;
-      if (!peerConnection) {
-        console.error('❌ No peer connection');
-        return;
-      }
+      const pc = peerConnectionRef.current;
+      if (!pc) { console.error('❌ No peer connection'); return; }
 
-      const answer = await createAnswer();
+      // Request media AFTER user accepts (avoids permission prompt before seeing who's calling)
+      await getLocalStream(callTypeRef.current);
+
+      const answer = await pc.createAnswer({
+        offerToReceiveAudio: true,
+        offerToReceiveVideo: callTypeRef.current === 'video'
+      });
+      await pc.setLocalDescription(answer);
 
       setCallStatus('connected');
+      setIsVideoEnabled(callTypeRef.current === 'video');
 
-      // Start timer
       callStartTimeRef.current = Date.now();
       setCallDuration(0);
       timerIntervalRef.current = setInterval(() => {
-        const elapsed = Math.floor((Date.now() - callStartTimeRef.current) / 1000);
-        setCallDuration(elapsed);
+        setCallDuration(Math.floor((Date.now() - callStartTimeRef.current) / 1000));
       }, 1000);
-
       statsIntervalRef.current = setInterval(monitorNetworkQuality, 2000);
 
       getSocket().emit('answer-call', {
@@ -491,25 +318,131 @@ export const useWebRTCVideo = (currentUser, remoteUser, callType = 'audio') => {
         callType: callTypeRef.current
       });
 
-      console.log('📤 Answer sent');
+      console.log('✅ Call accepted, answer sent');
     } catch (error) {
       console.error('❌ Error accepting call:', error);
       setCallStatus('ended');
     }
-  }, [createAnswer, incomingCaller, currentUser]);
+  }, [getLocalStream, incomingCaller, currentUser]);
+
+  // Handle answer (caller receives)
+  const handleAnswer = useCallback(async (answer) => {
+    try {
+      const pc = peerConnectionRef.current;
+      if (!pc) return;
+
+      if (callTimeoutRef.current) {
+        clearTimeout(callTimeoutRef.current);
+        callTimeoutRef.current = null;
+      }
+
+      await pc.setRemoteDescription(new RTCSessionDescription(answer));
+      remoteDescSetRef.current = true;
+
+      // Flush buffered ICE candidates
+      await flushBufferedCandidates();
+
+      // Start timer
+      if (!callStartTimeRef.current) {
+        callStartTimeRef.current = Date.now();
+        setCallDuration(0);
+        timerIntervalRef.current = setInterval(() => {
+          setCallDuration(Math.floor((Date.now() - callStartTimeRef.current) / 1000));
+        }, 1000);
+        statsIntervalRef.current = setInterval(monitorNetworkQuality, 2000);
+      }
+
+      console.log('✅ Remote description set from answer');
+    } catch (error) {
+      console.error('❌ Error handling answer:', error);
+    }
+  }, [flushBufferedCandidates]);
+
+  // Handle ICE candidate — buffer if remote description not set yet
+  const handleIceCandidate = useCallback(async (candidate) => {
+    try {
+      const pc = peerConnectionRef.current;
+      if (!pc || !candidate) return;
+
+      if (!remoteDescSetRef.current) {
+        // Buffer — remote description not set yet
+        iceCandidatesRef.current.push(candidate);
+        return;
+      }
+
+      await pc.addIceCandidate(new RTCIceCandidate(candidate));
+    } catch (error) {
+      if (error.code !== 11) {
+        console.error('❌ ICE candidate error:', error);
+      }
+    }
+  }, []);
+
+  // Monitor network quality
+  const monitorNetworkQuality = useCallback(() => {
+    const pc = peerConnectionRef.current;
+    if (!pc) return;
+
+    pc.getStats().then((stats) => {
+      let quality = 'excellent';
+      let warning = null;
+
+      stats.forEach((report) => {
+        if (report.type === 'inbound-rtp' && report.kind === 'audio') {
+          const total = (report.packetsLost || 0) + (report.packetsReceived || 0);
+          const lossPct = total > 0 ? (report.packetsLost / total) * 100 : 0;
+          if (lossPct > 5) { quality = 'poor'; warning = 'Poor network'; }
+          else if (lossPct > 2) quality = 'fair';
+          else if (lossPct > 1) quality = 'good';
+        }
+        if (report.type === 'candidate-pair' && report.state === 'succeeded') {
+          const rtt = report.currentRoundTripTime;
+          if (rtt > 0.4) { quality = 'poor'; warning = 'High latency'; }
+          else if (rtt > 0.2 && quality !== 'poor') quality = 'fair';
+        }
+      });
+
+      setNetworkQuality(quality);
+      if (warning && !networkWarning) {
+        setNetworkWarning(warning);
+        clearTimeout(networkWarningTimeoutRef.current);
+        networkWarningTimeoutRef.current = setTimeout(() => setNetworkWarning(null), 5000);
+      }
+    });
+  }, [networkWarning]);
+
+  // Cleanup
+  const cleanup = useCallback(() => {
+    if (timerIntervalRef.current) clearInterval(timerIntervalRef.current);
+    if (statsIntervalRef.current) clearInterval(statsIntervalRef.current);
+    if (callTimeoutRef.current) clearTimeout(callTimeoutRef.current);
+    if (networkWarningTimeoutRef.current) clearTimeout(networkWarningTimeoutRef.current);
+
+    callStartTimeRef.current = null;
+    callRemoteUserRef.current = null;
+    remoteStreamRef.current = null;
+    remoteDescSetRef.current = false;
+    iceCandidatesRef.current = [];
+
+    if (peerConnectionRef.current) {
+      peerConnectionRef.current.close();
+      peerConnectionRef.current = null;
+    }
+    if (localStreamRef.current) {
+      localStreamRef.current.getTracks().forEach(t => t.stop());
+      localStreamRef.current = null;
+    }
+    if (remoteAudioRef.current) remoteAudioRef.current.srcObject = null;
+    if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    if (localVideoRef.current) localVideoRef.current.srcObject = null;
+  }, []);
 
   // Reject call
   const rejectCall = useCallback(() => {
     setIncomingCall(false);
     setIncomingCaller(null);
     setCallStatus(null);
-
-    getSocket().emit('end-call', {
-      to: incomingCaller,
-      from: currentUser,
-      reason: 'rejected'
-    });
-
+    getSocket().emit('end-call', { to: incomingCaller, from: currentUser, reason: 'rejected' });
     cleanup();
   }, [incomingCaller, currentUser, cleanup]);
 
@@ -517,86 +450,48 @@ export const useWebRTCVideo = (currentUser, remoteUser, callType = 'audio') => {
   const endCall = useCallback(() => {
     setCallStatus('ended');
     setIncomingCall(false);
-
     const target = callRemoteUserRef.current || incomingCaller || remoteUser;
-    getSocket().emit('end-call', {
-      to: target,
-      from: currentUser
-    });
-
+    getSocket().emit('end-call', { to: target, from: currentUser });
     cleanup();
-
-    setTimeout(() => {
-      setCallStatus(null);
-      setCallDuration(0);
-      setNetworkWarning(null);
-      setIsVideoEnabled(callType === 'video');
-    }, 1000);
-  }, [remoteUser, incomingCaller, currentUser, cleanup, callType]);
+    setTimeout(() => { setCallStatus(null); setCallDuration(0); setNetworkWarning(null); }, 1000);
+  }, [remoteUser, incomingCaller, currentUser, cleanup]);
 
   // Handle remote end call
   const handleRemoteEndCall = useCallback(() => {
     setCallStatus('ended');
     setIncomingCall(false);
     cleanup();
-
-    setTimeout(() => {
-      setCallStatus(null);
-      setCallDuration(0);
-      setNetworkWarning(null);
-    }, 1000);
+    setTimeout(() => { setCallStatus(null); setCallDuration(0); setNetworkWarning(null); }, 1000);
   }, [cleanup]);
 
   // Mute/unmute
   const toggleMute = useCallback(() => {
     if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = !track.enabled;
-      });
-      setIsMuted(!isMuted);
+      localStreamRef.current.getAudioTracks().forEach(t => { t.enabled = !t.enabled; });
+      setIsMuted(prev => !prev);
     }
-  }, [isMuted]);
+  }, []);
 
   // Toggle speaker
   const toggleSpeaker = useCallback(() => {
-    setSpeakerEnabled(!speakerEnabled);
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.volume = !speakerEnabled ? SPEAKER_VOLUME : EARPIECE_VOLUME;
-    }
-  }, [speakerEnabled, EARPIECE_VOLUME]);
+    setSpeakerEnabled(prev => {
+      const next = !prev;
+      if (remoteAudioRef.current) {
+        remoteAudioRef.current.volume = next ? SPEAKER_VOLUME : EARPIECE_VOLUME;
+      }
+      return next;
+    });
+  }, [EARPIECE_VOLUME]);
 
   return {
-    // State
-    callStatus,
-    incomingCall,
-    incomingCaller,
-    incomingCallType,
-    callDuration,
-    isMuted,
-    speakerEnabled,
-    isVideoEnabled,
-    networkQuality,
-    networkWarning,
+    callStatus, incomingCall, incomingCaller, incomingCallType,
+    callDuration, isMuted, speakerEnabled, isVideoEnabled,
+    networkQuality, networkWarning,
     callType: incomingCall ? incomingCallType : callTypeRef.current,
-
-    // Refs
-    remoteAudioRef,
-    remoteVideoRef,
-    localVideoRef,
-
-    // Methods
-    startCall,
-    acceptCall,
-    rejectCall,
-    endCall,
-    handleOffer,
-    handleAnswer,
-    handleIceCandidate,
-    handleRemoteEndCall,
-    toggleMute,
-    toggleSpeaker,
-    toggleVideo,
-    cleanup
+    remoteAudioRef, remoteVideoRef, localVideoRef,
+    startCall, acceptCall, rejectCall, endCall,
+    handleOffer, handleAnswer, handleIceCandidate, handleRemoteEndCall,
+    toggleMute, toggleSpeaker, toggleVideo, cleanup
   };
 };
 

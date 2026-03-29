@@ -29,88 +29,95 @@
 /* ===== Input row ===== */
 .message-input {
   display: flex;
-  gap: 8px;
-  padding: 8px 10px;
+  gap: 6px;
+  padding: 6px 10px 8px;
   align-items: flex-end;
 }
 
-/* Rounded input container (holds attach + text input) */
+/* Rounded input container (holds attach + textarea) */
 .input-container {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   background: #fff;
-  border-radius: var(--radius-xl);
+  border-radius: 22px;
   min-height: 44px;
-  padding: 0 4px 0 0;
+  padding: 0 8px 0 0;
 }
 
-.input-container input {
+/* Attach icon stays at bottom, level with last line of text */
+.input-container .media-actions-wrapper {
+  align-self: flex-end;
+  margin-bottom: 2px;
+}
+
+.input-container textarea {
   flex: 1;
-  padding: 10px 14px 10px 4px;
+  padding: 12px 8px 12px 4px;
   border: none;
   font-size: 15px;
   background: transparent;
   color: var(--text-primary);
   font-family: inherit;
-  min-height: 44px;
-  line-height: 1.4;
+  height: 44px;
+  max-height: 120px;
+  line-height: 20px;
+  resize: none;
+  overflow-y: hidden;
+  scrollbar-width: none;
+  box-sizing: border-box;
 }
 
-.input-container input:focus { outline: none; }
-.input-container input:disabled { opacity: 0.5; cursor: not-allowed; }
-.input-container input::placeholder { color: var(--text-light); }
+.input-container textarea::-webkit-scrollbar {
+  display: none;
+}
 
-/* ===== WhatsApp-style Send Button ===== */
+.input-container textarea:focus { outline: none; }
+.input-container textarea:disabled { opacity: 0.5; cursor: not-allowed; }
+.input-container textarea::placeholder { color: var(--text-light); }
+
+/* ===== Send Button — flat icon, no background ===== */
 .send-btn {
   width: 44px;
   height: 44px;
-  border-radius: var(--radius-full);
-  background: var(--primary);
-  color: #fff;
+  background: none;
   border: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background 150ms ease, transform 100ms ease, opacity 150ms ease;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  padding: 0;
+  transition: transform 100ms ease;
 }
 
 .send-btn svg {
-  width: 22px;
-  height: 22px;
-  margin-left: 2px;
-}
-
-.send-btn:hover:not(:disabled) {
-  background: var(--primary-dark);
+  width: 24px;
+  height: 24px;
 }
 
 .send-btn:active:not(:disabled) {
-  transform: scale(0.9);
+  transform: scale(0.85);
 }
 
 .send-btn:disabled {
-  background: #a0aeb6;
-  cursor: not-allowed;
-  box-shadow: none;
+  cursor: default;
+  opacity: 0.35;
 }
 
 /* ===== Tablet ===== */
 @media (max-width: 768px) {
-  .message-input { padding: 6px 10px; }
+  .message-input { padding: 5px 8px 6px; }
   .input-container { min-height: 42px; }
-  .input-container input { padding: 9px 12px 9px 4px; font-size: 14px; min-height: 42px; }
+  .input-container textarea { padding: 11px 8px 11px 4px; font-size: 14px; }
   .send-btn { width: 42px; height: 42px; }
 }
 
 /* ===== Mobile ===== */
 @media (max-width: 480px) {
-  .message-input { padding: 6px 8px; gap: 6px; }
-  .input-container { min-height: 40px; }
-  .input-container input { padding: 9px 10px 9px 2px; font-size: 14px; min-height: 40px; }
+  .message-input { padding: 4px 6px 6px; gap: 4px; }
+  .input-container { min-height: 40px; border-radius: 20px; }
+  .input-container textarea { padding: 10px 6px 10px 2px; font-size: 14px; }
   .send-btn { width: 40px; height: 40px; }
-  .send-btn svg { width: 18px; height: 18px; }
+  .send-btn svg { width: 22px; height: 22px; }
 }

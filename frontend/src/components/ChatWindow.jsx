@@ -318,11 +318,9 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
                 <span className="typing-indicator-text">typing</span>
                 <div className="typing-dots-header"><span></span><span></span><span></span></div>
               </div>
-            ) : (
-              <div className={`header-status ${selectedUser.isOnline ? 'online' : ''}`}>
-                {selectedUser.isOnline ? 'online' : 'offline'}
-              </div>
-            )}
+            ) : selectedUser.isOnline ? (
+              <div className="header-status online">online</div>
+            ) : null}
           </div>
         </div>
         <div className="header-actions">

@@ -22,6 +22,21 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
     inputRef.current?.focus();
   }, [selectedUser?.username]);
 
+  // Auto-grow textarea only when text wraps past the first line
+  useEffect(() => {
+    const el = inputRef.current;
+    if (!el) return;
+    el.style.height = '44px'; // reset to one line
+    const scroll = el.scrollHeight;
+    if (scroll > 44) {
+      const h = Math.min(scroll, 120);
+      el.style.height = h + 'px';
+      el.style.overflowY = h >= 120 ? 'auto' : 'hidden';
+    } else {
+      el.style.overflowY = 'hidden';
+    }
+  }, [text]);
+
   const handleTyping = () => {
     if (!isTyping) {
       setIsTyping(true);
@@ -54,6 +69,7 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
     } : null;
 
     setText('');
+    if (inputRef.current) inputRef.current.style.height = 'auto';
     setIsTyping(false);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     emitStopTyping(currentUser.username, selectedUser.username);
@@ -177,19 +193,28 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
             isLoading={loading}
             onMenuToggle={handleMenuToggle}
           />
-          <input
+          <textarea
             ref={inputRef}
-            type="text"
+            rows={1}
             placeholder="Type a message"
             value={text}
-            onChange={(e) => { setText(e.target.value); handleTyping(); }}
+            onChange={(e) => {
+              setText(e.target.value);
+              handleTyping();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                if (text.trim()) handleSendMessage(e);
+              }
+            }}
             disabled={loading}
             autoComplete="off"
           />
         </div>
         <button type="submit" className="send-btn" disabled={loading || !text.trim()} aria-label="Send message">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22">
-            <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" fill="#ffffff"/>
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z" fill="#008069"/>
           </svg>
         </button>
       </form>

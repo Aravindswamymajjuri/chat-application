@@ -90,7 +90,7 @@
   text-transform: uppercase;
 }
 
-.header-info { flex: 1; min-width: 0; }
+.header-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
 
 .header-info h2 {
   font-size: 16px;
@@ -103,7 +103,7 @@
 }
 
 .typing-indicator { display: flex; align-items: center; gap: 6px; }
-.typing-indicator-text { color: rgba(255,255,255,0.8); font-size: 13px; }
+.typing-indicator-text { color: rgba(57, 56, 56, 0.8); font-size: 13px; }
 
 .typing-dots-header { display: inline-flex; gap: 3px; align-items: center; }
 .typing-dots-header span {
@@ -116,8 +116,8 @@
 .typing-dots-header span:nth-child(2) { animation-delay: 0.2s; }
 .typing-dots-header span:nth-child(3) { animation-delay: 0.4s; }
 
-.header-status { font-size: 12px; color: rgba(255,255,255,0.6); }
-.header-status.online { color: rgba(85, 83, 83, 0.85); }
+.header-status { font-size: 12px; }
+.header-status.online { color: rgba(37, 30, 30, 0.55); }
 
 .header-actions { display: flex; gap: 2px; align-items: center; }
 

@@ -75,13 +75,20 @@
   background: linear-gradient(135deg, #00A884 0%, #25D366 100%);
 }
 
-.user-avatar-online-dot {
+.user-avatar-status-dot {
   position: absolute;
   bottom: 1px; right: 1px;
   width: 12px; height: 12px;
   border-radius: var(--radius-full);
-  background: var(--color-online);
   border: 2px solid var(--bg-sidebar);
+}
+
+.user-avatar-status-dot.online {
+  background: var(--color-online);
+}
+
+.user-avatar-status-dot.offline {
+  background: var(--color-offline);
 }
 
 .user-item-content {
@@ -108,6 +115,18 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.user-msg-time {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.user-msg-time.unread {
+  color: var(--color-online);
+  font-weight: 500;
 }
 
 .user-item-bottom {
