@@ -53,6 +53,12 @@ export const useWebRTC = (currentUser, remoteUser) => {
   const statsIntervalRef = useRef(null);
   const networkWarningTimeoutRef = useRef(null);
 
+  // Detect mobile once
+  const isMobile = /iPhone|iPad|Android|webOS/i.test(navigator.userAgent);
+  // Mobile needs higher base volume since speakers are smaller
+  const EARPIECE_VOLUME = isMobile ? 0.8 : 0.3;
+  const SPEAKER_VOLUME = 1.0;
+
   // Attach remote stream to audio element and play (reads speakerEnabled via ref to avoid stale closures)
   const speakerEnabledRef = useRef(speakerEnabled);
   speakerEnabledRef.current = speakerEnabled;
@@ -69,7 +75,7 @@ export const useWebRTC = (currentUser, remoteUser) => {
 
     // Respect speaker toggle state (off = earpiece volume, on = loudspeaker volume)
     audioEl.muted = false;
-    audioEl.volume = speakerEnabledRef.current ? 1.0 : 0.3;
+    audioEl.volume = speakerEnabledRef.current ? SPEAKER_VOLUME : EARPIECE_VOLUME;
 
     if (audioEl.paused) {
       const playPromise = audioEl.play();
@@ -477,12 +483,12 @@ export const useWebRTC = (currentUser, remoteUser) => {
   const toggleSpeaker = useCallback(() => {
     if (remoteAudioRef.current) {
       const newSpeakerState = !speakerEnabled;
-      remoteAudioRef.current.muted = false; // Never mute — speaker toggle controls volume only
-      remoteAudioRef.current.volume = newSpeakerState ? 1.0 : 0.3;
+      remoteAudioRef.current.muted = false;
+      remoteAudioRef.current.volume = newSpeakerState ? SPEAKER_VOLUME : EARPIECE_VOLUME;
       setSpeakerEnabled(newSpeakerState);
       console.log(`🔊 Speaker ${newSpeakerState ? 'ON (loudspeaker)' : 'OFF (earpiece)'}`);
     }
-  }, [speakerEnabled]);
+  }, [speakerEnabled, EARPIECE_VOLUME]);
 
   // Monitor network quality using RTCPeerConnection stats
   const monitorNetworkQuality = useCallback(() => {
