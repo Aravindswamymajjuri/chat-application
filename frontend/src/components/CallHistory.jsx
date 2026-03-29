@@ -5,7 +5,7 @@ import '../styles/CallHistory.css';
 const CallHistory = ({ currentUser, selectedUser }) => {
   const [callHistory, setCallHistory] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [filter, setFilter] = useState('all'); // all, incoming, outgoing
+  const [filter, setFilter] = useState('all');
 
   useEffect(() => {
     if (currentUser && selectedUser) {
@@ -23,7 +23,7 @@ const CallHistory = ({ currentUser, selectedUser }) => {
       );
       setCallHistory(response.data.calls || []);
     } catch (error) {
-      console.error('❌ Error fetching call history:', error);
+      console.error('Error fetching call history:', error);
     } finally {
       setLoading(false);
     }
@@ -32,41 +32,13 @@ const CallHistory = ({ currentUser, selectedUser }) => {
   const formatDuration = (seconds) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
-    if (mins === 0) {
-      return `${secs}s`;
-    }
+    if (mins === 0) return `${secs}s`;
     return `${mins}m ${secs}s`;
   };
 
-  const getCallIcon = (call) => {
-    if (call.callerId === currentUser.username) {
-      return '📱'; // Outgoing call
-    } else {
-      return '📲'; // Incoming call
-    }
-  };
-
-  const getNetworkQualityColor = (quality) => {
-    switch (quality) {
-      case 'excellent':
-        return '#10b981';
-      case 'good':
-        return '#3b82f6';
-      case 'fair':
-        return '#f59e0b';
-      case 'poor':
-        return '#ef4444';
-      default:
-        return '#6b7280';
-    }
-  };
-
   const filteredCalls = callHistory.filter((call) => {
-    if (filter === 'incoming') {
-      return call.callerId !== currentUser.username;
-    } else if (filter === 'outgoing') {
-      return call.callerId === currentUser.username;
-    }
+    if (filter === 'incoming') return call.callerId !== currentUser.username;
+    if (filter === 'outgoing') return call.callerId === currentUser.username;
     return true;
   });
 
@@ -75,7 +47,7 @@ const CallHistory = ({ currentUser, selectedUser }) => {
       await callAPI.deleteCall(callId);
       setCallHistory((prev) => prev.filter((c) => c._id !== callId));
     } catch (error) {
-      console.error('❌ Error deleting call:', error);
+      console.error('Error deleting call:', error);
     }
   };
 
@@ -85,47 +57,63 @@ const CallHistory = ({ currentUser, selectedUser }) => {
         await callAPI.clearCallHistory(currentUser.username);
         setCallHistory([]);
       } catch (error) {
-        console.error('❌ Error clearing call history:', error);
+        console.error('Error clearing call history:', error);
       }
     }
   };
 
-  if (!selectedUser) {
-    return null;
-  }
+  if (!selectedUser) return null;
+
+  const formatTime = (dateStr) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const isToday = date.toDateString() === today.toDateString();
+    if (isToday) {
+      return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+    return date.toLocaleDateString([], { month: 'short', day: 'numeric' });
+  };
 
   return (
     <div className="call-history">
       <div className="call-history-header">
-        <h3>📞 Call History: {selectedUser.username}</h3>
-        <button 
-          className="clear-history-btn" 
+        <h3>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+          </svg>
+          Calls
+        </h3>
+        <button
+          className="clear-history-btn"
           onClick={handleClearHistory}
           disabled={callHistory.length === 0}
         >
-          🗑️ Clear
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="3 6 5 6 21 6"/>
+            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          </svg>
+          Clear
         </button>
       </div>
 
-      {/* Filter Tabs */}
       <div className="call-history-filters">
-        <button 
+        <button
           className={`filter-btn ${filter === 'all' ? 'active' : ''}`}
           onClick={() => setFilter('all')}
         >
           All ({callHistory.length})
         </button>
-        <button 
+        <button
           className={`filter-btn ${filter === 'incoming' ? 'active' : ''}`}
           onClick={() => setFilter('incoming')}
         >
-          📲 Incoming ({callHistory.filter(c => c.callerId !== currentUser.username).length})
+          Incoming
         </button>
-        <button 
+        <button
           className={`filter-btn ${filter === 'outgoing' ? 'active' : ''}`}
           onClick={() => setFilter('outgoing')}
         >
-          📱 Outgoing ({callHistory.filter(c => c.callerId === currentUser.username).length})
+          Outgoing
         </button>
       </div>
 
@@ -137,40 +125,50 @@ const CallHistory = ({ currentUser, selectedUser }) => {
         </div>
       ) : (
         <div className="call-history-list">
-          {filteredCalls.map((call) => (
-            <div key={call._id} className="call-history-item">
-              <div className="call-item-icon">{getCallIcon(call)}</div>
-              
-              <div className="call-item-info">
-                <div className="call-item-user">
-                  {call.callerId === currentUser.username
-                    ? `Called ${call.receiverId}`
-                    : `Called by ${call.callerId}`}
+          {filteredCalls.map((call) => {
+            const isOutgoing = call.callerId === currentUser.username;
+            return (
+              <div key={call._id} className="call-history-item">
+                <div className={`call-item-icon ${isOutgoing ? 'outgoing' : 'incoming'}`}>
+                  {isOutgoing ? (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="7 17 17 7"/>
+                      <polyline points="7 7 17 7 17 17"/>
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <polyline points="17 7 7 17"/>
+                      <polyline points="17 17 7 17 7 7"/>
+                    </svg>
+                  )}
                 </div>
-                <div className="call-item-details">
-                  <span className="call-duration">⏱️ {formatDuration(call.duration)}</span>
-                  <span 
-                    className="call-network-quality"
-                    style={{ color: getNetworkQualityColor(call.networkQuality) }}
-                    title={`Network: ${call.networkQuality}`}
-                  >
-                    📶 {call.networkQuality}
-                  </span>
-                </div>
-                <div className="call-item-time">
-                  {new Date(call.startTime).toLocaleString()}
-                </div>
-              </div>
 
-              <button
-                className="delete-call-btn"
-                onClick={() => handleDeleteCall(call._id)}
-                title="Delete this call"
-              >
-                ✕
-              </button>
-            </div>
-          ))}
+                <div className="call-item-info">
+                  <div className="call-item-user">
+                    {isOutgoing ? call.receiverId : call.callerId}
+                  </div>
+                  <div className="call-item-details">
+                    <span>{formatDuration(call.duration)}</span>
+                    <span>{call.networkQuality}</span>
+                  </div>
+                </div>
+
+                <div className="call-item-time">{formatTime(call.startTime)}</div>
+
+                <button
+                  className="delete-call-btn"
+                  onClick={() => handleDeleteCall(call._id)}
+                  title="Delete"
+                  aria-label="Delete call"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"/>
+                    <line x1="6" y1="6" x2="18" y2="18"/>
+                  </svg>
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

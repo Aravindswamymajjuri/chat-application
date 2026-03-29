@@ -7,14 +7,12 @@ function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Restore user from localStorage on app load
   useEffect(() => {
     const savedUser = localStorage.getItem('currentUser');
     if (savedUser) {
       try {
         setCurrentUser(JSON.parse(savedUser));
       } catch (error) {
-        console.error('Error parsing saved user:', error);
         localStorage.removeItem('currentUser');
       }
     }
@@ -23,19 +21,15 @@ function App() {
 
   const handleAuthSuccess = (user) => {
     setCurrentUser(user);
-    // Save to localStorage for persistence
     localStorage.setItem('currentUser', JSON.stringify(user));
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
-    // Clear from localStorage
     localStorage.removeItem('currentUser');
   };
 
-  if (loading) {
-    return <div className="app loading">Loading...</div>;
-  }
+  if (loading) return null;
 
   return (
     <div className="app">

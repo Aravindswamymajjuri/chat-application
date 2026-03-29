@@ -1,8 +1,8 @@
-import React, { useEffect, useState, useRef } from 'react';
-import { chatAPI, usersAPI } from '../utils/api';
-import { 
-  onReceiveMessage, onDeleteMessage, onDeleteMessageForMe, onTypingIndicator, 
-  onStopTyping, onMessageStatusUpdated, onCallUser, onAnswerCall, onIceCandidate, onEndCall, emitMessageSeen, emitMessageDelivered
+import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react';
+import { chatAPI } from '../utils/api';
+import {
+  onReceiveMessage, onDeleteMessage, onDeleteMessageForMe, onTypingIndicator,
+  onStopTyping, onMessageStatusUpdated, onCallUser, onAnswerCall, onIceCandidate, onEndCall, emitMessageSeen, emitMessageDelivered, emitClearUnreadCount
 } from '../utils/socket';
 import MessageActions from './MessageActions';
 import CallScreen from './CallScreen';
@@ -11,270 +11,170 @@ import CallHistory from './CallHistory';
 import { useWebRTC } from '../hooks/useWebRTC';
 import '../styles/ChatWindow.css';
 
-const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply, unreadCounts, onClearUnread, onIncrementUnread }) => {
+const URL_REGEX = /(?:https?:\/\/|www\.)[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_+.~#?&/=]*/gi;
+
+function linkifyText(text) {
+  if (!text) return text;
+  const parts = [];
+  let lastIndex = 0;
+  const regex = new RegExp(URL_REGEX.source, 'gi');
+  let match;
+  while ((match = regex.exec(text)) !== null) {
+    if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+    const url = match[0];
+    const href = url.startsWith('http') ? url : `https://${url}`;
+    parts.push(<a key={match.index} href={href} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}>{url}</a>);
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return parts.length > 0 ? parts : text;
+}
+
+function formatDateSeparator(dateStr) {
+  const date = new Date(dateStr);
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === today.toDateString()) return 'Today';
+  if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
+  return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+const SingleTick = () => (
+  <svg viewBox="0 0 16 15" width="16" height="15" fill="currentColor">
+    <path d="M10.91 3.316l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"/>
+  </svg>
+);
+
+const DoubleTick = () => (
+  <svg viewBox="0 0 16 15" width="16" height="15" fill="currentColor">
+    <path d="M15.01 3.316l-.478-.372a.365.365 0 0 0-.51.063L8.666 9.879a.32.32 0 0 1-.484.033l-.358-.325a.32.32 0 0 0-.484.033l-.36.462a.365.365 0 0 0 .063.51l1.36 1.23c.143.14.361.125.484-.033l6.186-7.953a.365.365 0 0 0-.063-.51zm-4.1 0l-.478-.372a.365.365 0 0 0-.51.063L4.566 9.879a.32.32 0 0 1-.484.033L1.891 7.769a.366.366 0 0 0-.515.006l-.423.433a.364.364 0 0 0 .006.514l3.258 3.185c.143.14.361.125.484-.033l6.272-8.048a.365.365 0 0 0-.063-.51z"/>
+  </svg>
+);
+
+const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply, unreadCounts, onClearUnread, onBack }) => {
   const [loading, setLoading] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState(null);
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
+  const [showScrollBtn, setShowScrollBtn] = useState(false);
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
 
-  // WebRTC Hook
   const {
-    callStatus,
-    incomingCall,
-    incomingCaller,
-    remoteAudioRef,
-    startCall,
-    acceptCall,
-    rejectCall,
-    endCall,
-    handleRemoteEndCall,
-    handleOffer,
-    handleAnswer,
-    handleIceCandidate,
-    cleanup,
-    callDuration,
-    isMuted,
-    speakerEnabled,
-    networkQuality,
-    networkWarning,
-    toggleMute,
-    toggleSpeaker
+    callStatus, incomingCall, incomingCaller, remoteAudioRef,
+    startCall, acceptCall, rejectCall, endCall, handleRemoteEndCall,
+    handleOffer, handleAnswer, handleIceCandidate, cleanup,
+    callDuration, isMuted, speakerEnabled, networkQuality, networkWarning,
+    toggleMute, toggleSpeaker
   } = useWebRTC(currentUser.username, selectedUser?.username);
 
-  // Set up all socket listeners first (component mount)
-  useEffect(() => {
-    console.log('🔌 Setting up socket listeners (on component mount)');
+  const handleScroll = useCallback(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    setShowScrollBtn(container.scrollHeight - container.scrollTop - container.clientHeight > 200);
   }, []);
 
-  // Subscribe to message status updates
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    container.addEventListener('scroll', handleScroll, { passive: true });
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, []);
+
   useEffect(() => {
     const unsubscribe = onMessageStatusUpdated((data) => {
-      console.log(`\n${'='.repeat(70)}`);
-      console.log(`📖 message-status-updated event received`);
-      console.log(`   Message ID: ${data.messageId}`);
-      console.log(`   From: ${data.sender} (sender)`);
-      console.log(`   To: ${data.receiver} (reader)`);
-      console.log(`   New Status: ${data.status}`);
-      console.log(`   Current user: ${currentUser.username}`);
-      console.log(`${'='.repeat(70)}`);
-      
-      // Update messages when status changes
       if (data.sender === currentUser.username) {
-        console.log(`✅ This is our message, updating UI...`);
-        setMessages((prev) => {
-          let found = false;
-          const updated = prev.map((msg) => {
-            // Convert both to strings for comparison (handle MongoDB ObjectId)
-            const msgIdStr = String(msg._id);
-            const dataIdStr = String(data.messageId);
-            
-            if (msgIdStr === dataIdStr) {
-              console.log(`   ✓✓ Match found! Updating "${msg.text.substring(0, 30)}" from "${msg.status}" to "${data.status}"`);
-              found = true;
-              return { ...msg, status: data.status };
-            }
-            return msg;
-          });
-          
-          if (!found) {
-            console.log(`⚠️ No message matched with ID ${data.messageId}`);
-            console.log(`   Available messages:`, prev.map(m => ({ id: String(m._id), sender: m.sender })));
-          }
-          
-          return updated;
-        });
-      } else {
-        console.log(`⚠️ This is not our message (sender is ${data.sender})`);
+        setMessages((prev) => prev.map((msg) =>
+          String(msg._id) === String(data.messageId) ? { ...msg, status: data.status } : msg
+        ));
       }
     });
-
     return unsubscribe;
   }, [currentUser.username]);
 
   useEffect(() => {
+    setIsTyping(false);
     if (selectedUser) {
       fetchMessages();
-      
-      // Clear unread count when user opens this chat (updated via ChatPage's socket listener)
-      console.log(`👁️ Opening chat with ${selectedUser.username} - clearing unread count`);
       onClearUnread?.(selectedUser.username);
     }
   }, [selectedUser?.username, currentUser.username, currentUser._id]);
 
   useEffect(() => {
-    // Subscribe to incoming messages
     const unsubscribe = onReceiveMessage((message) => {
-      console.log('📨 Message received from Socket:', message);
-      
-      // Update messages if this message is for the current conversation
-      // Check both directions: sender→receiver and receiver→sender
-      const isForCurrentConversation = 
-        (message.sender === currentUser.username && message.receiver === selectedUser.username) ||
-        (message.sender === selectedUser.username && message.receiver === currentUser.username);
-      
-      if (isForCurrentConversation) {
-        console.log('✅ Adding message to conversation');
-        console.log(`   Message ID: ${String(message._id)}`);
-        
-        // Emit message-delivered immediately
-        console.log(`📦 Emitting message-delivered for: ${message.sender}`);
+      const isForConvo = selectedUser &&
+        ((message.sender === currentUser.username && message.receiver === selectedUser.username) ||
+         (message.sender === selectedUser.username && message.receiver === currentUser.username));
+
+      if (isForConvo) {
         emitMessageDelivered(message._id, currentUser.username, message.sender);
-        
-        // If chat is already open, mark as seen immediately
-        console.log(`👁️ Emitting message-seen immediately (chat is open)`);
         emitMessageSeen(message._id, currentUser.username, message.sender);
-        
+        // Backend increments unread in saveMessage, but we're viewing this chat,
+        // so immediately clear it
+        emitClearUnreadCount(currentUser.username, message.sender);
+        onClearUnread?.(message.sender);
         setMessages((prev) => {
-          // Check if message already exists (to avoid duplicates from onMessageSent)
-          const isDuplicate = prev.some(
-            (m) => m.sender === message.sender && 
-                   m.receiver === message.receiver &&
-                   m.text === message.text && 
-                   Math.abs(new Date(m.timestamp) - new Date(message.timestamp)) < 2000
-          );
-          
-          if (isDuplicate) {
-            console.log('⚠️ Duplicate message ignored - already added via callback');
-            return prev;
-          }
-          
-          return [...prev, message];
+          const dup = prev.some(m => m.sender === message.sender && m.receiver === message.receiver && m.text === message.text && Math.abs(new Date(m.timestamp) - new Date(message.timestamp)) < 2000);
+          return dup ? prev : [...prev, message];
         });
-      } else {
-        // Message is for a DIFFERENT user - increment unread count
-        console.log('📬 Message not for current conversation - incrementing unread count');
-        console.log(`   From: ${message.sender}, To: ${message.receiver}`);
-        
-        // Only increment if this user received the message
-        if (message.receiver === currentUser.username) {
-          console.log(`✅ Incrementing unread count for: ${message.sender}`);
-          onIncrementUnread?.(message.sender);
-          
-          // Also update backend unread count
-          usersAPI.incrementUnreadCount(currentUser._id, message.sender)
-            .catch(err => console.warn('Could not update backend unread count:', err.message));
-        }
+      } else if (message.receiver === currentUser.username) {
+        // Message is for me but I'm on a different chat (or home screen)
+        emitMessageDelivered(message._id, currentUser.username, message.sender);
+        // Backend handles unread count: saveMessage increments in DB and
+        // emits 'unread-count-updated' with the absolute count via socket.
+        // No local increment here — avoids double-counting.
       }
     });
-
     return unsubscribe;
-  }, [selectedUser, currentUser.username, currentUser._id, setMessages, onIncrementUnread]);
+  }, [selectedUser, currentUser.username, currentUser._id, setMessages, onClearUnread]);
 
+  useEffect(() => { return onDeleteMessage((d) => setMessages((p) => p.filter((m) => m._id !== d.messageId))); }, [setMessages]);
+  useEffect(() => { return onDeleteMessageForMe((d) => setMessages((p) => p.map((m) => m._id === d.messageId && d.username !== currentUser.username ? { ...m, text: '[Deleted message]', deletedForMe: true } : m))); }, [setMessages, currentUser.username]);
+  const typingTimeoutRef = useRef(null);
   useEffect(() => {
-    // Subscribe to message deletion events (for everyone)
-    const unsubscribe = onDeleteMessage((data) => {
-      console.log('🗑️ Message deleted:', data.messageId);
-      setMessages((prev) => prev.filter((msg) => msg._id !== data.messageId));
-    });
-
-    return unsubscribe;
-  }, [setMessages]);
-
-  useEffect(() => {
-    // Subscribe to message deletion for me only
-    const unsubscribe = onDeleteMessageForMe((data) => {
-      console.log('🗑️ Message deleted for me:', data.messageId);
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === data.messageId && data.username !== currentUser.username
-            ? { ...msg, text: '[Deleted message]', deletedForMe: true }
-            : msg
-        )
-      );
-    });
-
-    return unsubscribe;
-  }, [setMessages, currentUser.username]);
-
-  useEffect(() => {
-    // Subscribe to typing indicator
-    const unsubscribe = onTypingIndicator((data) => {
-      if (data.username === selectedUser?.username && data.receiver === currentUser.username) {
+    const unsub = onTypingIndicator((d) => {
+      if (d.username === selectedUser?.username && d.receiver === currentUser.username) {
         setIsTyping(true);
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+        typingTimeoutRef.current = setTimeout(() => setIsTyping(false), 3000);
       }
     });
-
-    return unsubscribe;
+    return () => { unsub(); if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current); };
   }, [selectedUser, currentUser.username]);
-
   useEffect(() => {
-    // Subscribe to stop typing
-    const unsubscribe = onStopTyping((data) => {
-      if (data.username === selectedUser?.username && data.receiver === currentUser.username) {
+    return onStopTyping((d) => {
+      if (d.username === selectedUser?.username && d.receiver === currentUser.username) {
         setIsTyping(false);
+        if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
       }
     });
-
-    return unsubscribe;
   }, [selectedUser, currentUser.username]);
-
-  // WebRTC Call Event Listeners
-  useEffect(() => {
-    const unsubscribeCall = onCallUser((data) => {
-      console.log('📞 Incoming call from:', data.from);
-      handleOffer(data.offer, data.from);
-    });
-
-    return unsubscribeCall;
-  }, [handleOffer]);
+  useEffect(() => { return onCallUser((d) => handleOffer(d.offer, d.from)); }, [handleOffer]);
+  useEffect(() => { return onAnswerCall((d) => handleAnswer(d.answer)); }, [handleAnswer]);
+  useEffect(() => { return onIceCandidate((d) => handleIceCandidate(d.candidate)); }, [handleIceCandidate]);
+  useEffect(() => { return onEndCall(() => handleRemoteEndCall()); }, [handleRemoteEndCall]);
 
   useEffect(() => {
-    const unsubscribeAnswer = onAnswerCall((data) => {
-      console.log('✅ Call answered by:', data.from);
-      handleAnswer(data.answer);
-    });
-
-    return unsubscribeAnswer;
-  }, [handleAnswer]);
-
-  useEffect(() => {
-    const unsubscribeIce = onIceCandidate((data) => {
-      console.log('📡 ICE candidate received');
-      handleIceCandidate(data.candidate);
-    });
-
-    return unsubscribeIce;
-  }, [handleIceCandidate]);
-
-  useEffect(() => {
-    const unsubscribeEnd = onEndCall((data) => {
-      console.log('📵 Call ended by:', data.from);
-      handleRemoteEndCall();
-    });
-
-    return unsubscribeEnd;
-  }, [handleRemoteEndCall]);
-
-  useEffect(() => {
-    // Auto-scroll to bottom
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    if (container.scrollHeight - container.scrollTop - container.clientHeight < 300) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }
   }, [messages]);
 
   const fetchMessages = async () => {
     setLoading(true);
     try {
+      // getMessages API already marks unseen messages as 'seen' in DB
+      // and emits message-status-updated to the sender via socket
       const response = await chatAPI.getMessages(currentUser.username, selectedUser.username);
-      
-      console.log(`\n${'='.repeat(70)}`);
-      console.log(`📨 API Response received with ${response.data.length} messages`);
-      response.data.forEach(msg => {
-        console.log(`   - ${msg.sender} → ${msg.receiver}: status=${msg.status}, _id=${String(msg._id)}`);
-      });
-      
       setMessages(response.data);
-      console.log(`✅ State updated with ${response.data.length} messages`);
-      
-      // Emit socket event to mark unseen messages as seen in real-time
-      console.log(`\n📤 Emitting message-seen for unseen messages...`);
-      response.data.forEach(msg => {
-        if (msg.sender === selectedUser.username && msg.status !== 'seen') {
-          console.log(`   📤 Emitting for message: ${String(msg._id)} from ${msg.sender}`);
-          emitMessageSeen(msg._id, currentUser.username, msg.sender);
-        }
-      });
-      console.log(`${'='.repeat(70)}\n`);
-      
+      setTimeout(() => messagesEndRef.current?.scrollIntoView({ behavior: 'auto' }), 50);
     } catch (error) {
       console.error('Error fetching messages:', error);
     } finally {
@@ -284,41 +184,45 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
 
   const handleDeleteMessage = (messageId, forMeOnly = false) => {
     if (forMeOnly) {
-      // For "delete for me", show as deleted but keep in array
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg._id === messageId ? { ...msg, text: '[Deleted message]', deletedForMe: true } : msg
-        )
-      );
+      setMessages((p) => p.map((m) => m._id === messageId ? { ...m, text: '[Deleted message]', deletedForMe: true } : m));
     } else {
-      // For "delete for everyone", remove completely
-      setMessages((prev) => prev.filter((msg) => msg._id !== messageId));
+      setMessages((p) => p.filter((m) => m._id !== messageId));
     }
   };
 
   const handleReplyClick = (message) => {
-    if (onReply) {
-      onReply({
-        id: message._id,
-        text: message.text,
-        sender: message.sender
-      });
-    }
+    onReply?.({ id: message._id, text: message.text, sender: message.sender });
   };
 
   const handleStartCall = () => {
-    if (selectedUser.isOnline) {
-      startCall();
-    } else {
-      alert(`${selectedUser.username} is offline`);
-    }
+    if (selectedUser.isOnline) startCall();
+    else alert(`${selectedUser.username} is offline`);
   };
+
+  const groupedMessages = useMemo(() => {
+    const groups = [];
+    let lastDate = '';
+    messages.forEach((msg) => {
+      const msgDate = new Date(msg.timestamp).toDateString();
+      if (msgDate !== lastDate) {
+        groups.push({ type: 'date', date: msg.timestamp, key: `date-${msgDate}` });
+        lastDate = msgDate;
+      }
+      groups.push({ type: 'message', data: msg, key: msg._id || `msg-${groups.length}` });
+    });
+    return groups;
+  }, [messages]);
+
+  const getInitial = (name) => name ? name.charAt(0).toUpperCase() : '?';
 
   if (!selectedUser) {
     return (
       <div className="chat-window empty">
         <div className="empty-state">
-          <h2>Select a user to start chatting</h2>
+          <svg className="empty-state-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          <h2>Select a chat to start messaging</h2>
         </div>
       </div>
     );
@@ -326,135 +230,120 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
 
   return (
     <div className="chat-window">
-      {/* Call Screen (Full screen overlay) */}
-      {callStatus && <CallScreen 
-        callStatus={callStatus} 
-        remoteUser={selectedUser.username}
-        onEndCall={endCall}
-        remoteAudioRef={remoteAudioRef}
-        isMuted={isMuted}
-        callDuration={callDuration}
-        networkQuality={networkQuality}
-        networkWarning={networkWarning}
-        onToggleMute={toggleMute}
-        onToggleSpeaker={toggleSpeaker}
-        speakerEnabled={speakerEnabled}
-      />}
+      {callStatus && <CallScreen callStatus={callStatus} remoteUser={selectedUser.username} onEndCall={endCall} remoteAudioRef={remoteAudioRef} isMuted={isMuted} callDuration={callDuration} networkQuality={networkQuality} networkWarning={networkWarning} onToggleMute={toggleMute} onToggleSpeaker={toggleSpeaker} speakerEnabled={speakerEnabled} />}
+      {incomingCall && <IncomingCallPopup caller={incomingCaller} onAccept={acceptCall} onReject={rejectCall} />}
 
-      {/* Incoming Call Popup */}
-      {incomingCall && <IncomingCallPopup 
-        caller={incomingCaller}
-        onAccept={acceptCall}
-        onReject={rejectCall}
-      />}
-
+      {/* Chat header with back arrow */}
       <div className="chat-header">
-        <div className="header-info">
-          <h2>{selectedUser.username}</h2>
-          {isTyping ? (
-            <div className="typing-indicator">
-              <span>✍️ typing...</span>
-              <div className="typing-dots">
-                <span></span><span></span><span></span>
-              </div>
-            </div>
-          ) : (
-            <div className={`user-status ${selectedUser.isOnline ? 'online' : 'offline'}`}>
-              {selectedUser.isOnline ? '🟢 Online' : '🔘 Offline'}
-            </div>
+        <div className="header-user">
+          {onBack && (
+            <button className="back-btn" onClick={onBack} aria-label="Back to chats">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="15 18 9 12 15 6"/>
+              </svg>
+            </button>
           )}
+          <div className="chat-header-avatar">{getInitial(selectedUser.username)}</div>
+          <div className="header-info">
+            <h2>{selectedUser.username}</h2>
+            {isTyping ? (
+              <div className="typing-indicator">
+                <span className="typing-indicator-text">typing</span>
+                <div className="typing-dots-header"><span></span><span></span><span></span></div>
+              </div>
+            ) : (
+              <div className={`header-status ${selectedUser.isOnline ? 'online' : ''}`}>
+                {selectedUser.isOnline ? 'online' : 'offline'}
+              </div>
+            )}
+          </div>
         </div>
         <div className="header-actions">
-          <button 
-            className={`history-btn ${showCallHistory ? 'active' : ''}`}
-            onClick={() => setShowCallHistory(!showCallHistory)}
-            title="View call history"
-          >
-            📞 History
+          <button className="chat-header-btn" onClick={handleStartCall} disabled={!selectedUser.isOnline || callStatus} aria-label="Voice call">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
+            </svg>
           </button>
-          <button 
-            className="call-btn" 
-            onClick={handleStartCall} 
-            disabled={!selectedUser.isOnline || callStatus} 
-            title={callStatus ? `${callStatus}...` : 'Call user'}
-          >
-            📞
+          <button className={`chat-header-btn ${showCallHistory ? 'active' : ''}`} onClick={() => setShowCallHistory(!showCallHistory)} aria-label="Call history">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+            </svg>
           </button>
         </div>
       </div>
 
       <div className="chat-content-wrapper">
-        <div className="messages-container">
-        {loading ? (
-          <div className="loading">Loading messages...</div>
-        ) : messages.length === 0 ? (
-          <div className="no-messages">No messages yet. Start the conversation!</div>
-        ) : (
-          <>
-            {messages.map((msg, index) => (
-              <div
-                key={msg._id || index}
-                className={`message ${msg.sender === currentUser.username ? 'sent' : 'received'} ${
-                  msg.deletedForMe ? 'deleted' : ''
-                }`}
-                onClick={() => setActiveMessageId(activeMessageId === msg._id ? null : msg._id)}
-              >
-                {msg.replyTo && (
-                  <div className="message-reply-quote">
-                    <div className="reply-quote-sender">↩️ {msg.replyTo.sender}</div>
-                    <div className="reply-quote-text">{msg.replyTo.text}</div>
+        <div className="messages-container" ref={messagesContainerRef}>
+          {loading ? (
+            <div className="loading-skeleton">
+              <div className="skeleton-date" />
+              <div className="skeleton-msg received" />
+              <div className="skeleton-msg sent short" />
+              <div className="skeleton-msg received long" />
+              <div className="skeleton-msg sent" />
+              <div className="skeleton-msg received short" />
+              <div className="skeleton-msg sent long" />
+              <div className="skeleton-msg received" />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="no-messages">No messages yet. Say hello!</div>
+          ) : (
+            <>
+              {groupedMessages.map((item) => {
+                if (item.type === 'date') {
+                  return (
+                    <div key={item.key} className="date-separator">
+                      <span className="date-separator-label">{formatDateSeparator(item.date)}</span>
+                    </div>
+                  );
+                }
+                const msg = item.data;
+                const isSent = msg.sender === currentUser.username;
+                return (
+                  <div key={item.key} className={`message ${isSent ? 'sent' : 'received'} ${msg.deletedForMe ? 'deleted' : ''}`} onClick={() => setActiveMessageId(activeMessageId === msg._id ? null : msg._id)}>
+                    <div className="message-bubble">
+                      {msg.replyTo && (
+                        <div className="message-reply-quote">
+                          <div className="reply-quote-sender">{msg.replyTo.sender}</div>
+                          <div className="reply-quote-text">{msg.replyTo.text}</div>
+                        </div>
+                      )}
+                      <div className="message-text">{linkifyText(msg.text)}</div>
+                      <div className="message-footer">
+                        <span className="message-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        {isSent && (
+                          <span className={`tick-icon ${msg.status}`}>
+                            {msg.status === 'sent' && <SingleTick />}
+                            {(msg.status === 'delivered' || msg.status === 'seen') && <DoubleTick />}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    {activeMessageId === msg._id && !msg.deletedForMe && (
+                      <MessageActions messageId={msg._id} message={msg} currentUsername={currentUser.username} isOwnMessage={isSent} onDelete={handleDeleteMessage} onReply={handleReplyClick} onClose={() => setActiveMessageId(null)} />
+                    )}
                   </div>
-                )}
-                <div className="message-content">{msg.text}</div>
-                <div className="message-time">
-                  {new Date(msg.timestamp).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}
-                  {msg.sender === currentUser.username && (
-                    <span className={`read-status ${msg.status === 'seen' ? 'seen' : msg.status === 'delivered' ? 'delivered' : 'sent'}`}>
-                      {msg.status === 'sent' && '✓'}
-                      {msg.status === 'delivered' && '✓✓'}
-                      {msg.status === 'seen' && '✓✓'}
-                    </span>
-                  )}
+                );
+              })}
+              {isTyping && (
+                <div className="typing-bubble">
+                  <div className="typing-dots"><span></span><span></span><span></span></div>
                 </div>
+              )}
+            </>
+          )}
+          <div ref={messagesEndRef} />
+        </div>
 
-                {activeMessageId === msg._id && !msg.deletedForMe && (
-                  <MessageActions
-                    messageId={msg._id}
-                    message={msg}
-                    currentUsername={currentUser.username}
-                    isOwnMessage={msg.sender === currentUser.username}
-                    onDelete={handleDeleteMessage}
-                    onReply={handleReplyClick}
-                    onClose={() => setActiveMessageId(null)}
-                  />
-                )}
-              </div>
-            ))}
-
-            {isTyping && (
-              <div className="message received typing-message">
-                <div className="message-content typing-dots">
-                  <span></span>
-                  <span></span>
-                  <span></span>
-                </div>
-              </div>
-            )}
-          </>
+        {showScrollBtn && (
+          <button className="scroll-to-bottom" onClick={scrollToBottom} aria-label="Scroll to bottom">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9"/>
+            </svg>
+          </button>
         )}
-        <div ref={messagesEndRef} />
-      </div>
 
-        {/* Call History Sidebar */}
-        {showCallHistory && (
-          <CallHistory 
-            currentUser={currentUser} 
-            selectedUser={selectedUser}
-          />
-        )}
+        {showCallHistory && <CallHistory currentUser={currentUser} selectedUser={selectedUser} />}
       </div>
     </div>
   );

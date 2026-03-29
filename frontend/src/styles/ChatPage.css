@@ -1,256 +1,140 @@
+/* ===== Root container - fills viewport exactly ===== */
 .chat-page {
-  width: 100%;
-  height: 100vh;
-  display: flex;
-  flex-direction: column;
-  background: #fff;
-  position: relative;
-  overflow: hidden;
-}
-
-/* Fixed Header */
-.app-header {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
-  height: 60px;
-  background: #fff;
-  border-bottom: 1px solid #ddd;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ===== Top Navbar - ALWAYS fixed at top ===== */
+.app-header {
+  height: 50px;
+  background: var(--bg-header);
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 0 20px;
-  z-index: 1000;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 0 16px;
+  flex-shrink: 0;
+  z-index: 10;
+}
+
+.app-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-on-primary);
+  letter-spacing: 0.3px;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: nowrap;
-}
-
-.hamburger-btn {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 4px 8px;
-  display: none;
-  transition: transform 0.3s;
-  color: #333;
-  flex-shrink: 0;
-}
-
-.hamburger-btn:hover {
-  transform: scale(1.1);
-}
-
-.current-username {
-  font-size: 16px;
-  font-weight: 600;
-  color: #333;
-  white-space: nowrap;
-  flex-shrink: 0;
-}
-
-.user-status-indicator {
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background: #4caf50;
-  flex-shrink: 0;
-  display: inline-block;
+  gap: 12px;
 }
 
 .header-right {
   display: flex;
-  gap: 8px;
+  gap: 2px;
   align-items: center;
 }
 
-.header-settings-btn,
-.header-logout-btn {
-  padding: 8px 12px;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  font-size: 16px;
-  transition: all 0.3s;
+.header-icon-btn {
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-full);
+  cursor: pointer;
+  color: var(--text-on-primary);
+  transition: background var(--transition);
 }
 
-.header-settings-btn:hover,
-.header-logout-btn:hover {
-  background: #5568d3;
-  transform: scale(1.05);
+.header-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
 }
 
-/* Main Content Area */
+.header-icon-btn:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.header-icon-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ===== Body below navbar - takes exactly remaining height ===== */
 .chat-container {
+  height: calc(100% - 50px);
   display: flex;
-  flex: 1;
-  margin-top: 60px;
-  width: 100%;
   overflow: hidden;
 }
 
-.chat-main {
-  flex: 1;
+/* ===== Left sidebar - FIXED width, never scrolls as a whole ===== */
+.sidebar-panel {
+  width: 340px;
+  height: 100%;
+  flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  background: #f5f5f5;
   overflow: hidden;
-  min-height: 0;
+  border-right: 1px solid var(--border-light);
+  background: var(--bg-sidebar);
 }
 
-/* Tablet Breakpoint */
+/* ===== Right chat panel - fills rest, column: header + messages + input ===== */
+.chat-panel {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-width: 0;
+  background: var(--bg-chat);
+}
+
+/* ===== Mobile ===== */
 @media (max-width: 768px) {
   .app-header {
-    height: 56px;
-    padding: 0 16px;
+    height: 48px;
+    padding: 0 10px;
   }
 
-  .hamburger-btn {
-    display: block;
-  }
-
-  .current-username {
-    font-size: 14px;
-  }
-
-  .user-status-indicator {
-    width: 10px;
-    height: 10px;
-  }
-
-  .header-settings-btn,
-  .header-logout-btn {
-    padding: 6px 10px;
-    font-size: 14px;
-  }
+  .app-title { font-size: 17px; }
+  .header-icon-btn { width: 36px; height: 36px; }
+  .header-icon-btn svg { width: 18px; height: 18px; }
 
   .chat-container {
-    margin-top: 56px;
-    flex-direction: column;
-    position: relative;
-    height: calc(100vh - 56px);
+    height: calc(100% - 48px);
   }
 
-  .sidebar {
-    position: absolute;
-    left: 0;
-    top: 0;
+  .sidebar-panel {
     width: 100%;
-    height: 50vh;
-    max-height: 50vh;
-    min-height: 50vh;
     border-right: none;
-    border-bottom: 1px solid #ddd;
-    transition: transform 0.3s ease, visibility 0.3s ease;
-    z-index: 100;
-    transform: translateY(-100%);
-    visibility: hidden;
-    overflow-y: auto;
-    overflow-x: hidden;
   }
 
-  .chat-container.sidebar-open .sidebar {
-    transform: translateY(0);
-    visibility: visible;
-  }
-
-  .chat-main {
-    transition: margin-top 0.3s ease;
-    margin-top: 0;
-  }
-
-  .chat-container.sidebar-open .chat-main {
-    margin-top: 50vh;
-    height: 50vh;
-    overflow: hidden;
-  }
-}
-
-/* Mobile Breakpoint */
-@media (max-width: 480px) {
-  .app-header {
-    height: 52px;
-    padding: 0 12px;
-  }
-
-  .hamburger-btn {
-    display: block;
-    font-size: 20px;
-    padding: 4px 6px;
-  }
-
-  .current-username {
-    font-size: 13px;
-  }
-
-  .user-status-indicator {
-    width: 8px;
-    height: 8px;
-  }
-
-  .header-right {
-    gap: 6px;
-  }
-
-  .header-settings-btn,
-  .header-logout-btn {
-    padding: 6px 8px;
-    font-size: 13px;
-  }
-
-  .chat-container {
-    margin-top: 52px;
-    height: calc(100vh - 52px);
-  }
-
-  .sidebar {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100vh;
-    max-height: 100vh;
-    min-height: 100vh;
-    border-right: none;
-    border-bottom: 1px solid #ddd;
-    transition: transform 0.3s ease, visibility 0.3s ease;
-    z-index: 100;
-    transform: translateY(-100%);
-    visibility: hidden;
-    overflow-y: auto;
-    overflow-x: hidden;
-  }
-
-  .chat-container.sidebar-open .sidebar {
-    transform: translateY(0);
-    visibility: visible;
-  }
-
-  .chat-main {
-    transition: margin-top 0.3s ease;
-    margin-top: 0;
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    background: #f5f5f5;
-    overflow: hidden;
-    min-height: 0;
-  }
-
-  .chat-container.sidebar-open .chat-main {
-    margin-top: 0;
+  .chat-panel {
     display: none;
+  }
+
+  .app-header.chat-open {
+    display: none;
+  }
+
+  .chat-container.chat-open {
+    height: 100%;
+  }
+
+  .chat-container.chat-open .sidebar-panel {
+    display: none;
+  }
+
+  .chat-container.chat-open .chat-panel {
+    display: flex;
   }
 }

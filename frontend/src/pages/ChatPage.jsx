@@ -5,7 +5,7 @@ import MessageInput from '../components/MessageInput';
 import AppLockModal from '../components/AppLockModal';
 import Settings from '../components/Settings';
 import { authAPI, usersAPI } from '../utils/api';
-import { disconnectSocket, emitUserLogout, initializeSocket, emitUserJoin, onUnreadCountUpdated, onUnreadCountCleared, emitClearUnreadCount } from '../utils/socket';
+import { disconnectSocket, emitUserLogout, initializeSocket, emitUserJoin, onUnreadCountUpdated, onUnreadCountCleared, emitClearUnreadCount, onUserOnline, onUserOffline, onTypingIndicator, onStopTyping, emitUserAway, emitUserBack } from '../utils/socket';
 import { setupForegroundNotifications, requestFCMToken, registerServiceWorker } from '../utils/firebase';
 import { useAppSecurity, setAppLockSession, wasAppLocked } from '../utils/security';
 import '../styles/ChatPage.css';
@@ -18,302 +18,186 @@ const ChatPage = ({ currentUser, onLogout }) => {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [hasAppLock, setHasAppLock] = useState(false);
   const [replyingTo, setReplyingTo] = useState(null);
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
-  // Track unread message counts: { username: count }
   const [unreadCounts, setUnreadCounts] = useState({});
+  // Track who is typing (for sidebar display)
+  const [typingUsers, setTypingUsers] = useState({});
+  // Track last message timestamp per user for sorting
+  const [lastMessageTimes, setLastMessageTimes] = useState({});
 
-  // Memoize callback functions to prevent infinite loops in child components
   const handleClearUnread = useCallback((username) => {
-    setUnreadCounts((prev) => {
-      const updated = { ...prev };
-      delete updated[username];
-      return updated;
-    });
+    setUnreadCounts((prev) => { const u = { ...prev }; delete u[username]; return u; });
   }, []);
 
-  const handleIncrementUnread = useCallback((username) => {
-    setUnreadCounts((prev) => ({
-      ...prev,
-      [username]: (prev[username] || 0) + 1
-    }));
+  const handleReply = useCallback((msg) => setReplyingTo(msg), []);
+
+  const handleSelectUser = useCallback((user) => {
+    setSelectedUser(user);
+    setReplyingTo(null);
   }, []);
 
-  const handleReply = useCallback((msg) => {
-    setReplyingTo(msg);
-  }, []);
+  const handleBack = useCallback(() => { setSelectedUser(null); setReplyingTo(null); }, []);
 
-  // Emit clear-unread-count when user selects a different chat
-  useEffect(() => {
-    if (selectedUser) {
-      console.log(`📤 Emitting clear-unread-count from ChatPage for ${selectedUser.username}`);
-      emitClearUnreadCount(currentUser.username, selectedUser.username);
+  const handleMessageSent = useCallback((message) => {
+    setMessages((prev) => [...prev, message]);
+    // Update last message time for the receiver (for sorting)
+    if (message.receiver) {
+      setLastMessageTimes((prev) => ({ ...prev, [message.receiver]: Date.now() }));
     }
+  }, []);
+
+  useEffect(() => {
+    if (selectedUser) emitClearUnreadCount(currentUser.username, selectedUser.username);
   }, [selectedUser?.username, currentUser.username]);
 
-  // Check if app lock is enabled
   useEffect(() => {
     const checkAppLock = async () => {
       try {
-        const response = await authAPI.checkAppLock(currentUser.username);
-        const appLockEnabled = response.data?.hasAppLock === true;
-        setHasAppLock(appLockEnabled);
-        
-        console.log('🔍 App lock check result:', appLockEnabled);
-        
-        // Show modal if app lock is enabled and user wasn't already verified
-        if (appLockEnabled && wasAppLocked(currentUser.username)) {
-          console.log('🔒 Showing app lock modal');
-          setAppLockModalOpen(true);
-        } else if (appLockEnabled) {
-          // User was already verified in this session
-          console.log('✅ User already verified in this session');
-          setAppLockSession(currentUser.username);
-        }
-      } catch (error) {
-        console.error('⚠️  Error checking app lock (non-blocking):', error.message);
-        // Don't crash if app lock check fails - app can still work
-        setHasAppLock(false);
-      }
+        const res = await authAPI.checkAppLock(currentUser.username);
+        const enabled = res.data?.hasAppLock === true;
+        setHasAppLock(enabled);
+        if (enabled && wasAppLocked(currentUser.username)) setAppLockModalOpen(true);
+        else if (enabled) setAppLockSession(currentUser.username);
+      } catch { setHasAppLock(false); }
     };
-
-    if (currentUser?.username) {
-      checkAppLock();
-    }
+    if (currentUser?.username) checkAppLock();
   }, [currentUser.username]);
 
-  // Setup security listeners (tab switch, window focus, etc)
-  useAppSecurity(
-    currentUser.username,
-    hasAppLock,
-    () => setAppLockModalOpen(true)
-  );
+  useAppSecurity(currentUser.username, hasAppLock, () => setAppLockModalOpen(true));
+
+  // WhatsApp-style online/offline: online only when tab is visible
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (document.hidden) {
+        emitUserAway(currentUser.username);
+      } else {
+        emitUserBack(currentUser.username);
+      }
+    };
+
+    // Tab/window close: sendBeacon as backup to guarantee offline in DB
+    // Must use text/plain to avoid CORS preflight (sendBeacon can't do preflight)
+    const handleBeforeUnload = () => {
+      const apiUrl = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+      navigator.sendBeacon(
+        `${apiUrl}/auth/go-offline`,
+        JSON.stringify({ username: currentUser.username })
+      );
+    };
+
+    document.addEventListener('visibilitychange', handleVisibility);
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibility);
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [currentUser.username]);
 
   useEffect(() => {
-    // Initialize Socket.IO when ChatPage loads
-    const socket = initializeSocket();
-    console.log('🔌 Socket.IO initialized');
-    
-    // Register user - will emit immediately or on reconnect
+    initializeSocket();
     emitUserJoin(currentUser.username);
-
-    // Setup foreground notifications
-    setupForegroundNotifications((notification) => {
-      console.log('🔔 Notification received:', notification);
-      if (notification.notification) {
-        alert(`💬 ${notification.notification.title}\n${notification.notification.body}`);
-      }
-    });
-
-    // Initialize FCM notifications with proper sequencing
-    const initializeFCM = async () => {
+    setupForegroundNotifications(() => {});
+    const initFCM = async () => {
       try {
-        console.log('🔔 Starting FCM initialization...');
-        
-        // Step 1: Register Service Worker first (MUST be before requesting token)
-        const swRegistration = await registerServiceWorker();
-        if (!swRegistration) {
-          console.warn('⚠️ Service Worker registration returned null');
-          return;
-        }
-        console.log('✅ Service Worker registered successfully');
-
-        // Step 2: Wait a bit for Service Worker to be active
-        let retries = 0;
-        while (!swRegistration.active && retries < 10) {
-          console.log(`⏳ Waiting for Service Worker to become active... (${retries + 1}/10)`);
-          await new Promise(resolve => setTimeout(resolve, 500));
-          retries++;
-        }
-
-        if (!swRegistration.active) {
-          console.warn('⚠️ Service Worker did not become active within timeout');
-          return;
-        }
-
-        console.log('✅ Service Worker is now active');
-
-        // Step 3: Request FCM token (now that SW is active)
-        const fcmToken = await requestFCMToken();
-        if (!fcmToken) {
-          console.warn('⚠️ FCM token request returned null/empty');
-          return;
-        }
-        console.log('✅ FCM Token obtained successfully');
-
-        // Step 4: Send token to backend
-        if (currentUser._id) {
-          await authAPI.updateFCMToken(currentUser._id, fcmToken);
-          console.log('✅ FCM token sent to backend and stored in database');
-        } else {
-          console.warn('⚠️ User ID missing - cannot store FCM token on backend');
-        }
-      } catch (error) {
-        console.error('❌ FCM initialization failed:', error);
-        console.error('Notification details:', {
-          message: error.message,
-          stack: error.stack
-        });
-      }
+        const sw = await registerServiceWorker();
+        if (!sw) return;
+        let r = 0;
+        while (!sw.active && r < 10) { await new Promise(res => setTimeout(res, 500)); r++; }
+        if (!sw.active) return;
+        const token = await requestFCMToken();
+        if (token && currentUser._id) await authAPI.updateFCMToken(currentUser._id, token);
+      } catch (e) { console.error('FCM init failed:', e); }
     };
-
-    // Start FCM initialization
-    initializeFCM();
-
-    return () => {
-      // Cleanup on unmount
-      // Socket remains connected for page refresh - just stop listening
-    };
+    initFCM();
   }, [currentUser._id, currentUser.username]);
 
-  // Fetch unread message counts on load
   useEffect(() => {
-    const fetchUnreadCounts = async () => {
-      try {
-        console.log('📬 Fetching unread message counts...');
-        const response = await usersAPI.getUnreadCounts(currentUser._id);
-        setUnreadCounts(response.data.unreadCounts || {});
-        console.log('✅ Unread counts loaded:', response.data.unreadCounts);
-      } catch (error) {
-        console.warn('Could not fetch unread counts:', error.message);
-      }
-    };
-
     if (currentUser._id) {
-      fetchUnreadCounts();
+      usersAPI.getUnreadCounts(currentUser._id)
+        .then(r => setUnreadCounts(r.data.unreadCounts || {}))
+        .catch(() => {});
     }
   }, [currentUser._id]);
 
-  // Listen for unread count updates via socket
+  // Real-time online/offline: update BOTH users list and selectedUser
   useEffect(() => {
-    const unsubscribeUpdated = onUnreadCountUpdated((data) => {
-      console.log('📬 Unread count updated:', data);
-      setUnreadCounts((prev) => ({
-        ...prev,
-        [data.senderUsername]: data.count
-      }));
+    const unsubOn = onUserOnline((data) => {
+      setUsers((prev) => prev.map((u) => u.username === data.username ? { ...u, isOnline: true } : u));
+      setSelectedUser((prev) => prev && prev.username === data.username ? { ...prev, isOnline: true } : prev);
     });
-
-    const unsubscribeCleared = onUnreadCountCleared((data) => {
-      console.log('✅ Unread count cleared:', data);
-      setUnreadCounts((prev) => {
-        const updated = { ...prev };
-        delete updated[data.senderUsername];
-        return updated;
-      });
+    const unsubOff = onUserOffline((data) => {
+      setUsers((prev) => prev.map((u) => u.username === data.username ? { ...u, isOnline: false } : u));
+      setSelectedUser((prev) => prev && prev.username === data.username ? { ...prev, isOnline: false } : prev);
     });
-
-    return () => {
-      unsubscribeUpdated();
-      unsubscribeCleared();
-    };
+    return () => { unsubOn(); unsubOff(); };
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await authAPI.logout(currentUser._id);
-      emitUserLogout(currentUser.username);
-      disconnectSocket();
-      onLogout();
-    } catch (error) {
-      console.error('Logout error:', error);
-      onLogout();
-    }
-  };
+  // Unread count socket listeners — single source of truth from backend
+  useEffect(() => {
+    const u1 = onUnreadCountUpdated((d) => {
+      setUnreadCounts((p) => ({ ...p, [d.senderUsername]: d.count }));
+      // Also update last message time so sidebar sorts this user to top
+      setLastMessageTimes((p) => ({ ...p, [d.senderUsername]: Date.now() }));
+    });
+    const u2 = onUnreadCountCleared((d) => setUnreadCounts((p) => { const u = { ...p }; delete u[d.senderUsername]; return u; }));
+    return () => { u1(); u2(); };
+  }, []);
 
-  const handleAppLockUnlock = () => {
-    setAppLockSession(currentUser.username);
-    setAppLockModalOpen(false);
-  };
-
-  const handleToggleAppLock = async () => {
-    try {
-      if (hasAppLock) {
-        // Turn OFF app lock - but first set a flag to know it's disabled
-        // For now, we show settings to disable it
-        setSettingsModalOpen(true);
-      } else {
-        // Turn ON app lock - show settings to set password
-        setSettingsModalOpen(true);
+  // Typing indicators for sidebar (with auto-clear timeout as safety)
+  const typingTimers = React.useRef({});
+  useEffect(() => {
+    const unsubTyping = onTypingIndicator((data) => {
+      if (data.receiver === currentUser.username) {
+        setTypingUsers((prev) => ({ ...prev, [data.username]: true }));
+        // Auto-clear after 3s in case stop_typing event is missed
+        if (typingTimers.current[data.username]) clearTimeout(typingTimers.current[data.username]);
+        typingTimers.current[data.username] = setTimeout(() => {
+          setTypingUsers((prev) => { const u = { ...prev }; delete u[data.username]; return u; });
+        }, 3000);
       }
-    } catch (error) {
-      console.error('Error toggling app lock:', error);
-    }
+    });
+    const unsubStop = onStopTyping((data) => {
+      if (data.receiver === currentUser.username) {
+        if (typingTimers.current[data.username]) clearTimeout(typingTimers.current[data.username]);
+        setTypingUsers((prev) => { const u = { ...prev }; delete u[data.username]; return u; });
+      }
+    });
+    return () => { unsubTyping(); unsubStop(); };
+  }, [currentUser.username]);
+
+  const handleLogout = async () => {
+    try { await authAPI.logout(currentUser._id); emitUserLogout(currentUser.username); disconnectSocket(); } catch {}
+    onLogout();
   };
 
-  const handleMessageSent = (message) => {
-    setMessages((prev) => [...prev, message]);
-  };
+  const isChatOpen = selectedUser !== null;
 
   return (
     <div className="chat-page">
-      <AppLockModal
-        username={currentUser.username}
-        onUnlock={handleAppLockUnlock}
-        isOpen={appLockModalOpen}
-      />
+      <AppLockModal username={currentUser.username} onUnlock={() => { setAppLockSession(currentUser.username); setAppLockModalOpen(false); }} isOpen={appLockModalOpen} />
+      <Settings currentUsername={currentUser.username} isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} hasAppLock={hasAppLock} onAppLockChange={(e) => setHasAppLock(e)} />
 
-      <Settings
-        currentUsername={currentUser.username}
-        isOpen={settingsModalOpen}
-        onClose={() => setSettingsModalOpen(false)}
-        hasAppLock={hasAppLock}
-        onAppLockChange={(enabled) => setHasAppLock(enabled)}
-      />
-
-      {/* Fixed Header */}
-      <div className="app-header">
+      <div className={`app-header ${isChatOpen ? 'chat-open' : ''}`}>
         <div className="header-left">
-          <button 
-            className="hamburger-btn" 
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            title="Toggle sidebar"
-          >
-            ☰
-          </button>
-          <span className="current-username">👤 {currentUser.username}</span>
-          <div className="user-status-indicator online"></div>
+          <span className="app-title">Chattie</span>
         </div>
         <div className="header-right">
-          <button className="header-settings-btn" onClick={() => setSettingsModalOpen(true)} title="Settings">
-            ⚙️
+          <button className="header-icon-btn" onClick={() => setSettingsModalOpen(true)} aria-label="Settings">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
           </button>
-          <button className="header-logout-btn" onClick={handleLogout} title="Logout">
-            🚪
+          <button className="header-icon-btn" onClick={handleLogout} aria-label="Logout">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           </button>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className={`chat-container ${sidebarOpen ? 'sidebar-open' : 'sidebar-closed'}`}>
-        <Sidebar
-          currentUser={currentUser}
-          selectedUser={selectedUser}
-          onSelectUser={setSelectedUser}
-          users={users}
-          setUsers={setUsers}
-          unreadCounts={unreadCounts}
-        />
-
-        <div className="chat-main">
-          <ChatWindow
-            currentUser={currentUser}
-            selectedUser={selectedUser}
-            messages={messages}
-            setMessages={setMessages}
-            onReply={handleReply}
-            unreadCounts={unreadCounts}
-            onClearUnread={handleClearUnread}
-            onIncrementUnread={handleIncrementUnread}
-          />
-
+      <div className={`chat-container ${isChatOpen ? 'chat-open' : ''}`}>
+        <div className="sidebar-panel">
+          <Sidebar currentUser={currentUser} selectedUser={selectedUser} onSelectUser={handleSelectUser} users={users} setUsers={setUsers} unreadCounts={unreadCounts} typingUsers={typingUsers} lastMessageTimes={lastMessageTimes} />
+        </div>
+        <div className="chat-panel">
+          <ChatWindow currentUser={currentUser} selectedUser={selectedUser} messages={messages} setMessages={setMessages} onReply={handleReply} unreadCounts={unreadCounts} onClearUnread={handleClearUnread} onBack={handleBack} />
           {selectedUser && (
-            <MessageInput
-              currentUser={currentUser}
-              selectedUser={selectedUser}
-              onMessageSent={handleMessageSent}
-              replyingTo={replyingTo}
-              onReplyCancel={() => setReplyingTo(null)}
-            />
+            <MessageInput currentUser={currentUser} selectedUser={selectedUser} onMessageSent={handleMessageSent} replyingTo={replyingTo} onReplyCancel={() => setReplyingTo(null)} />
           )}
         </div>
       </div>

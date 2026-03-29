@@ -135,6 +135,16 @@ export const emitUserLogout = (username) => {
   socket.emit('user_logout', { username });
 };
 
+export const emitUserAway = (username) => {
+  const socket = getSocket();
+  socket.emit('user_away', { username });
+};
+
+export const emitUserBack = (username) => {
+  const socket = getSocket();
+  socket.emit('user_back', { username });
+};
+
 // Unread count events
 export const emitClearUnreadCount = (username, senderUsername) => {
   const socket = getSocket();
@@ -181,21 +191,25 @@ export const onReceiveMessage = (callback) => {
 export const onUserOnline = (callback) => {
   const socket = getSocket();
   socket.on('user_online', callback);
+  return () => socket.off('user_online', callback);
 };
 
 export const onUserOffline = (callback) => {
   const socket = getSocket();
   socket.on('user_offline', callback);
+  return () => socket.off('user_offline', callback);
 };
 
 export const onTypingIndicator = (callback) => {
   const socket = getSocket();
   socket.on('typing_indicator', callback);
+  return () => socket.off('typing_indicator', callback);
 };
 
 export const onStopTyping = (callback) => {
   const socket = getSocket();
   socket.on('stop_typing', callback);
+  return () => socket.off('stop_typing', callback);
 };
 
 export const onMessageStatusUpdated = (callback) => {
@@ -211,11 +225,13 @@ export const onMessageStatusUpdated = (callback) => {
 export const onDeleteMessage = (callback) => {
   const socket = getSocket();
   socket.on('message_deleted', callback);
+  return () => socket.off('message_deleted', callback);
 };
 
 export const onDeleteMessageForMe = (callback) => {
   const socket = getSocket();
   socket.on('message_deleted_for_me', callback);
+  return () => socket.off('message_deleted_for_me', callback);
 };
 
 // WebRTC Call Events
@@ -227,6 +243,7 @@ export const emitCallUser = (to, from, offer) => {
 export const onCallUser = (callback) => {
   const socket = getSocket();
   socket.on('call-user', callback);
+  return () => socket.off('call-user', callback);
 };
 
 export const emitAnswerCall = (to, from, answer) => {
@@ -237,6 +254,7 @@ export const emitAnswerCall = (to, from, answer) => {
 export const onAnswerCall = (callback) => {
   const socket = getSocket();
   socket.on('answer-call', callback);
+  return () => socket.off('answer-call', callback);
 };
 
 export const emitIceCandidate = (to, candidate) => {
@@ -247,6 +265,7 @@ export const emitIceCandidate = (to, candidate) => {
 export const onIceCandidate = (callback) => {
   const socket = getSocket();
   socket.on('ice-candidate', callback);
+  return () => socket.off('ice-candidate', callback);
 };
 
 export const emitEndCall = (to, from, reason) => {
@@ -257,6 +276,7 @@ export const emitEndCall = (to, from, reason) => {
 export const onEndCall = (callback) => {
   const socket = getSocket();
   socket.on('end-call', callback);
+  return () => socket.off('end-call', callback);
 };
 
 export const disconnectSocket = () => {

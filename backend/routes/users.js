@@ -2,13 +2,14 @@ const express = require('express');
 const router = express.Router();
 const usersController = require('../controllers/usersController');
 
+// Static routes FIRST (before parameterized :userId routes)
 router.get('/all', usersController.getAllUsers);
-router.get('/:userId', usersController.getUserById);
 router.put('/status', usersController.updateOnlineStatus);
-
-// Unread message count routes
-router.get('/:userId/unread-counts', usersController.getUnreadCounts);
 router.post('/unread-counts/clear', usersController.clearUnreadCount);
 router.post('/unread-counts/increment', usersController.incrementUnreadCount);
+
+// Parameterized routes LAST
+router.get('/:userId/unread-counts', usersController.getUnreadCounts);
+router.get('/:userId', usersController.getUserById);
 
 module.exports = router;

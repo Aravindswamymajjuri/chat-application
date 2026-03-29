@@ -1,124 +1,153 @@
-/* Call History Styles */
 .call-history {
-  background: white;
-  border-left: 1px solid #e5e7eb;
-  padding: 20px;
-  max-width: 350px;
+  background: var(--bg-sidebar);
+  border-left: 1px solid var(--border-light);
+  padding: 16px;
+  max-width: 340px;
+  width: 340px;
   height: 100%;
   overflow-y: auto;
-  animation: slideInRight 0.3s ease-out;
+  animation: historySlide 200ms ease-out;
+  transition: background-color var(--transition);
 }
 
-@keyframes slideInRight {
-  from {
-    opacity: 0;
-    transform: translateX(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
+@keyframes historySlide {
+  from { opacity: 0; transform: translateX(16px); }
+  to { opacity: 1; transform: translateX(0); }
 }
 
 .call-history-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  border-bottom: 2px solid #f3f4f6;
-  padding-bottom: 15px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-light);
 }
 
 .call-history-header h3 {
   margin: 0;
-  font-size: 16px;
-  color: #1f2937;
+  font-size: 15px;
+  color: var(--text-primary);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.call-history-header h3 svg {
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
 }
 
 .clear-history-btn {
-  background: #ef4444;
-  color: white;
+  background: transparent;
+  color: var(--color-danger);
   border: none;
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   font-size: 12px;
   font-weight: 600;
-  transition: all 0.3s ease;
+  transition: background var(--transition);
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .clear-history-btn:hover:not(:disabled) {
-  background: #dc2626;
-  transform: scale(1.05);
+  background: rgba(234, 0, 56, 0.08);
 }
 
 .clear-history-btn:disabled {
-  background: #d1d5db;
+  opacity: 0.3;
   cursor: not-allowed;
-  opacity: 0.5;
+}
+
+.clear-history-btn svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Filter Tabs */
 .call-history-filters {
   display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
+  gap: 6px;
+  margin-bottom: 16px;
   overflow-x: auto;
-  padding-bottom: 10px;
 }
 
 .filter-btn {
-  padding: 8px 12px;
-  border: 1px solid #d1d5db;
-  background: white;
-  border-radius: 6px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-light);
+  background: transparent;
+  border-radius: var(--radius-full);
   cursor: pointer;
   font-size: 12px;
-  font-weight: 600;
-  color: #6b7280;
-  transition: all 0.3s ease;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all var(--transition);
   white-space: nowrap;
 }
 
 .filter-btn:hover {
-  border-color: #9ca3af;
-  color: #374151;
+  border-color: var(--primary);
+  color: var(--primary);
 }
 
 .filter-btn.active {
-  background: #667eea;
-  color: white;
-  border-color: #667eea;
+  background: var(--primary);
+  color: var(--text-on-primary);
+  border-color: var(--primary);
 }
 
 /* Call History List */
 .call-history-list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 4px;
 }
 
 .call-history-item {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
-  padding: 12px;
-  background: #f9fafb;
-  border-radius: 8px;
-  border: 1px solid #e5e7eb;
-  transition: all 0.3s ease;
+  padding: 10px;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition);
 }
 
 .call-history-item:hover {
-  background: #f3f4f6;
-  border-color: #d1d5db;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  background: var(--bg-hover);
 }
 
 .call-item-icon {
-  font-size: 20px;
-  min-width: 24px;
-  text-align: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-full);
+  background: var(--bg-search);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.call-item-icon svg {
+  width: 18px;
+  height: 18px;
+  color: var(--primary);
+}
+
+.call-item-icon.outgoing svg {
+  color: var(--primary);
+}
+
+.call-item-icon.incoming svg {
+  color: var(--color-online);
+}
+
+.call-item-icon.missed svg {
+  color: var(--color-danger);
 }
 
 .call-item-info {
@@ -127,95 +156,73 @@
 }
 
 .call-item-user {
-  font-weight: 600;
-  color: #1f2937;
-  font-size: 13px;
-  margin-bottom: 6px;
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 14px;
+  margin-bottom: 2px;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .call-item-details {
   display: flex;
-  gap: 12px;
+  gap: 8px;
   font-size: 12px;
-  margin-bottom: 6px;
-  flex-wrap: wrap;
-}
-
-.call-duration {
-  color: #6b7280;
-  background: white;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-
-.call-network-quality {
-  font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: rgba(0, 0, 0, 0.05);
+  color: var(--text-light);
+  align-items: center;
 }
 
 .call-item-time {
-  font-size: 11px;
-  color: #9ca3af;
+  font-size: 12px;
+  color: var(--text-light);
+  flex-shrink: 0;
+  text-align: right;
 }
 
 .delete-call-btn {
   background: transparent;
   border: none;
-  color: #9ca3af;
+  color: var(--text-light);
   cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 4px;
-  transition: all 0.3s ease;
-  min-width: 28px;
-  text-align: center;
+  padding: 6px;
+  border-radius: var(--radius-full);
+  transition: all var(--transition);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+}
+
+.call-history-item:hover .delete-call-btn {
+  opacity: 1;
 }
 
 .delete-call-btn:hover {
-  background: #fee2e2;
-  color: #ef4444;
+  background: rgba(234, 0, 56, 0.08);
+  color: var(--color-danger);
 }
 
-/* Empty State */
+.delete-call-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Empty/Loading */
 .call-history-loading,
 .call-history-empty {
   text-align: center;
-  padding: 40px 20px;
-  color: #9ca3af;
+  padding: 40px 16px;
+  color: var(--text-light);
   font-size: 13px;
-}
-
-.call-history-loading {
-  animation: pulse 1.5s infinite;
-}
-
-/* Scrollbar Styling */
-.call-history::-webkit-scrollbar {
-  width: 6px;
-}
-
-.call-history::-webkit-scrollbar-track {
-  background: #f1f5f9;
-  border-radius: 3px;
-}
-
-.call-history::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 3px;
-}
-
-.call-history::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8;
 }
 
 /* Responsive */
 @media (max-width: 768px) {
   .call-history {
     max-width: 100%;
+    width: 100%;
     border-left: none;
-    border-top: 1px solid #e5e7eb;
+    border-top: 1px solid var(--border-light);
   }
 }

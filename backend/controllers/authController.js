@@ -1,5 +1,14 @@
 const User = require('../models/User');
 
+// Socket.io instance and connected users map (set from server.js)
+let io = null;
+let connectedUsers = {};
+
+exports.setIO = (ioInstance, usersMap) => {
+  io = ioInstance;
+  connectedUsers = usersMap;
+};
+
 exports.register = async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -199,6 +208,30 @@ exports.checkAppLock = async (req, res) => {
   } catch (error) {
     console.error('💥 Error checking app lock:', error.message);
     res.status(500).json({ message: 'Error checking app lock', error: error.message });
+  }
+};
+
+// Go offline (called via sendBeacon on tab close)
+exports.goOffline = async (req, res) => {
+  try {
+    // sendBeacon may send as application/json (Blob) or text/plain (string)
+    let username = req.body?.username;
+    if (!username && typeof req.body === 'string') {
+      try { username = JSON.parse(req.body).username; } catch {}
+    }
+    if (username) {
+      await User.findOneAndUpdate({ username }, { isOnline: false });
+      // Remove from connected users and broadcast offline to all clients
+      if (connectedUsers[username]) {
+        delete connectedUsers[username];
+      }
+      if (io) {
+        io.emit('user_offline', { username });
+      }
+    }
+    res.status(200).json({ ok: true });
+  } catch (error) {
+    res.status(200).json({ ok: true }); // Always return 200 for beacon
   }
 };
 

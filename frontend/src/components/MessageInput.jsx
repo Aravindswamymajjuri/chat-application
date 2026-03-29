@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { chatAPI, notificationAPI } from '../utils/api';
 import { emitSendMessage, emitTyping, emitStopTyping } from '../utils/socket';
 import ReplyPreview from './ReplyPreview';
@@ -15,13 +15,7 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
       setIsTyping(true);
       emitTyping(currentUser.username, selectedUser.username);
     }
-
-    // Clear previous timeout
-    if (typingTimeoutRef.current) {
-      clearTimeout(typingTimeoutRef.current);
-    }
-
-    // Set new timeout to stop typing
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
       emitStopTyping(currentUser.username, selectedUser.username);
@@ -30,7 +24,6 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-
     if (!text.trim()) return;
 
     setLoading(true);
@@ -43,59 +36,38 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
 
     setText('');
     setIsTyping(false);
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    emitStopTyping(currentUser.username, selectedUser.username);
     onReplyCancel?.();
 
     try {
-      // Save message to database
       const saveResponse = await chatAPI.saveMessage(currentUser.username, selectedUser.username, messageText, replyData);
-      const savedMessage = saveResponse.data?.data; // Get the saved message with _id and replyTo
-      
-      console.log('💾 Saved message from API:', savedMessage);
-      console.log('📦 replyData that was sent:', replyData);
+      const savedMessage = saveResponse.data?.data;
 
-      // Emit via Socket.IO for real-time delivery with the full saved message (includes _id)
+      // 1. Add message to state FIRST (so status updates can find it)
+      const messageForState = savedMessage || {
+        sender: currentUser.username,
+        receiver: selectedUser.username,
+        text: messageText,
+        replyTo: replyData,
+        timestamp: new Date(),
+        status: 'sent'
+      };
+      onMessageSent?.(messageForState);
+
+      // 2. Emit via socket (receiver will respond with delivered/seen)
       emitSendMessage(currentUser.username, selectedUser.username, messageText, replyData, savedMessage);
 
-      // Send push notification
-      try {
-        console.log(`📱 Sending notification to ${selectedUser.username}...`);
-        const notifResponse = await notificationAPI.sendNotificationByUsername(
-          selectedUser.username,
-          currentUser.username,
-          messageText
-        );
-        console.log('✅ Notification sent successfully:', notifResponse.data);
-      } catch (notifError) {
-        console.warn('⚠️ Notification failed (but message was sent):', {
-          status: notifError.response?.status,
-          message: notifError.response?.data?.message || notifError.message,
-          fullError: notifError
-        });
-        
-        // Show user that notification failed but message was sent
-        if (notifError.response?.status === 400) {
-          console.warn('Possible reasons:');
-          console.warn('- User has not granted notification permission');
-          console.warn('- FCM token not stored in database');
-          console.warn('- Receiver user not found');
-        }
-      }
+      // 3. Send push notification (fire-and-forget, don't block)
+      notificationAPI.sendNotificationByUsername(
+        selectedUser.username,
+        currentUser.username,
+        messageText
+      ).catch(() => {});
 
-      // Callback to update UI with the saved message data (includes _id and properly formatted replyTo)
-      if (onMessageSent) {
-        console.log('🚀 Calling onMessageSent with:', savedMessage || 'fallback object');
-        onMessageSent(savedMessage || {
-          sender: currentUser.username,
-          receiver: selectedUser.username,
-          text: messageText,
-          replyTo: replyData,
-          timestamp: new Date()
-        });
-      }
     } catch (error) {
       console.error('Error sending message:', error);
-      setText(messageText); // Restore text on error
-      alert('Failed to send message');
+      setText(messageText);
     } finally {
       setLoading(false);
     }
@@ -104,24 +76,21 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
   return (
     <div className="message-input-wrapper">
       {replyingTo && (
-        <ReplyPreview
-          replyTo={replyingTo}
-          onCancel={onReplyCancel}
-        />
+        <ReplyPreview replyTo={replyingTo} onCancel={onReplyCancel} />
       )}
       <form className="message-input" onSubmit={handleSendMessage}>
         <input
           type="text"
-          placeholder="Type a message..."
+          placeholder="Type a message"
           value={text}
-          onChange={(e) => {
-            setText(e.target.value);
-            handleTyping();
-          }}
+          onChange={(e) => { setText(e.target.value); handleTyping(); }}
           disabled={loading}
+          autoComplete="off"
         />
-        <button type="submit" disabled={loading || !text.trim()}>
-          {loading ? 'Sending...' : 'Send'}
+        <button type="submit" className="send-btn" disabled={loading || !text.trim()} aria-label="Send message">
+          <svg viewBox="0 0 24 24" fill="currentColor">
+            <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+          </svg>
         </button>
       </form>
     </div>

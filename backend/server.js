@@ -24,9 +24,9 @@ const io = socketIO(server, {
   // Polling support for stability on free tiers (Render)
   transports: ['websocket', 'polling'],
   
-  // Connection handling
-  pingTimeout: 60000,
-  pingInterval: 25000,
+  // Connection handling - detect disconnects faster
+  pingTimeout: 20000,
+  pingInterval: 10000,
   
   // Allow many connections
   maxHttpBufferSize: 1e6
@@ -49,6 +49,7 @@ app.use(cors({
   origin: allowedOrigins
 }));
 app.use(express.json());
+app.use(express.text({ type: 'text/plain' }));
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -63,12 +64,14 @@ const chatRoutes = require('./routes/chat');
 const notificationRoutes = require('./routes/notification');
 const callHistoryRoutes = require('./routes/callHistory');
 const chatController = require('./controllers/chatController');
+const authController = require('./controllers/authController');
 
 // Track connected users: { username: socketId }
 const connectedUsers = {};
 
-// Initialize chat controller with io instance and connectedUsers map for real-time updates
+// Initialize controllers with io instance and connectedUsers map for real-time updates
 chatController.setIO(io, connectedUsers);
+authController.setIO(io, connectedUsers);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/users', usersRoutes);
@@ -88,29 +91,14 @@ io.on('connection', (socket) => {
   // When user joins
   socket.on('user_join', (data) => {
     const { username } = data;
-    console.log(`\n${'='.repeat(50)}`);
-    console.log(`👤 User ${username} joined with socket ${socket.id}`);
-    
-    // If user was already connected, log it
-    const previousSocketId = connectedUsers[username];
-    if (previousSocketId && previousSocketId !== socket.id) {
-      console.log(`⚠️ User ${username} reconnected (was on ${previousSocketId.substring(0, 8)}...)`);
-    }
-    
-    // Update to new socket ID (effectively replaces old connection)
     connectedUsers[username] = socket.id;
-    
-    // Join a room named after the user for personal notifications
     socket.join(`user_${username}`);
-    console.log(`📍 User ${username} joined room: user_${username}`);
-    
-    console.log(`📊 Connected users map now:`, Object.entries(connectedUsers).map(([u, id]) => `${u}: ${id.substring(0, 8)}...`).join(', '));
-    console.log(`${'='.repeat(50)}\n`);
-    
-    socket.broadcast.emit('user_online', {
-      username,
-      status: 'online'
-    });
+
+    // Mark online in DB
+    const User = require('./models/User');
+    User.findOneAndUpdate({ username }, { isOnline: true }).catch(() => {});
+
+    socket.broadcast.emit('user_online', { username });
   });
 
   // Send message event
@@ -239,63 +227,73 @@ io.on('connection', (socket) => {
       });
   });
 
-  // Update unread message count
-  socket.on('unread-count-update', (data) => {
-    const { receiverUsername, senderUsername, count } = data;
-    console.log(`\n💬 unread-count-update event received`);
-    console.log(`   Receiver: ${receiverUsername}`);
-    console.log(`   Sender: ${senderUsername}`);
-    console.log(`   Count: ${count}`);
-    
-    // Broadcast to the receiver so their UI updates
-    io.to(`user_${receiverUsername}`).emit('unread-count-updated', {
-      senderUsername,
-      count
-    });
-    
-    console.log(`   📤 Emitted unread-count-updated to user_${receiverUsername}`);
-  });
-
   // Clear unread count when user opens chat
-  socket.on('clear-unread-count', (data) => {
+  socket.on('clear-unread-count', async (data) => {
     const { username, senderUsername } = data;
-    console.log(`\n✅ clear-unread-count event received`);
-    console.log(`   User: ${username}`);
-    console.log(`   Cleared for: ${senderUsername}`);
-    
+    console.log(`✅ clear-unread-count: ${username} cleared ${senderUsername}`);
+
+    // Persist to DB - remove this sender's count
+    try {
+      const User = require('./models/User');
+      await User.findOneAndUpdate(
+        { username },
+        { $unset: { [`unreadCounts.${senderUsername}`]: 1 } }
+      );
+    } catch (err) {
+      console.error('Error clearing unread count in DB:', err.message);
+    }
+
     // Broadcast to the user so their UI updates
     io.to(`user_${username}`).emit('unread-count-cleared', {
       senderUsername
     });
-    
-    console.log(`   📤 Emitted unread-count-cleared to user_${username}`);
   });
 
-  // User disconnects
+  // User goes away (tab hidden / minimized) - WhatsApp-style: only "online" when tab is visible
+  socket.on('user_away', (data) => {
+    const { username } = data;
+    if (username) {
+      const User = require('./models/User');
+      User.findOneAndUpdate({ username }, { isOnline: false }).catch(() => {});
+      socket.broadcast.emit('user_offline', { username });
+    }
+  });
+
+  // User comes back (tab visible again)
+  socket.on('user_back', (data) => {
+    const { username } = data;
+    if (username) {
+      connectedUsers[username] = socket.id;
+      socket.join(`user_${username}`);
+      const User = require('./models/User');
+      User.findOneAndUpdate({ username }, { isOnline: true }).catch(() => {});
+      socket.broadcast.emit('user_online', { username });
+    }
+  });
+
+  // User disconnects (close tab / lose connection)
   socket.on('disconnect', () => {
-    console.log(`User disconnected: ${socket.id}`);
-    // Remove user from connectedUsers
+    let disconnectedUser = null;
     for (const [username, socketId] of Object.entries(connectedUsers)) {
       if (socketId === socket.id) {
+        disconnectedUser = username;
         delete connectedUsers[username];
-        console.log(`Removed ${username} from connected users`);
         break;
       }
     }
-    socket.broadcast.emit('user_offline', {
-      socketId: socket.id,
-      status: 'offline'
-    });
+    if (disconnectedUser) {
+      const User = require('./models/User');
+      User.findOneAndUpdate({ username: disconnectedUser }, { isOnline: false }).catch(() => {});
+      socket.broadcast.emit('user_offline', { username: disconnectedUser });
+    }
   });
 
   // Explicit logout
   socket.on('user_logout', (data) => {
-    console.log(`User ${data.username} logged out`);
     delete connectedUsers[data.username];
-    socket.broadcast.emit('user_offline', {
-      username: data.username,
-      status: 'offline'
-    });
+    const User = require('./models/User');
+    User.findOneAndUpdate({ username: data.username }, { isOnline: false }).catch(() => {});
+    socket.broadcast.emit('user_offline', { username: data.username });
   });
 
   // WebRTC Call Events

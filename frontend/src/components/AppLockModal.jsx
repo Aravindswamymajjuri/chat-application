@@ -29,14 +29,18 @@ const AppLockModal = ({ username, onUnlock, isOpen }) => {
     <div className="app-lock-overlay">
       <div className="app-lock-modal">
         <div className="app-lock-header">
-          <h2>🔒 App Lock</h2>
+          <svg className="app-lock-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+          </svg>
+          <h2>App Locked</h2>
           <p>Enter password to continue</p>
         </div>
 
         <form onSubmit={handleVerify} className="app-lock-form">
           <input
             type="password"
-            placeholder="Enter app lock password"
+            placeholder="Enter password"
             value={password}
             onChange={(e) => {
               setPassword(e.target.value);
