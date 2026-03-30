@@ -382,6 +382,9 @@
 }
 .message.deleted .message-footer .tick-icon { display: none; }
 
+/* ===== Swipe-to-reply indicator ===== */
+.message { position: relative; }
+
 /* ===== Call event messages — centered in chat ===== */
 .call-event-msg {
   align-self: center;

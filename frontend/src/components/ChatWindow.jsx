@@ -68,8 +68,66 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
   const [showMenu, setShowMenu] = useState(false);
   const [activePanel, setActivePanel] = useState(null); // 'pinned' | 'starred' | 'callHistory' | null
   const [starredMessages, setStarredMessages] = useState([]);
+  const [swipingMsgId, setSwipingMsgId] = useState(null);
+  const [swipeX, setSwipeX] = useState(0);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
+  const touchRef = useRef({ startX: 0, startY: 0, startTime: 0, longPressTimer: null, isSwiping: false, longPressed: false });
+  const isMobileDevice = typeof window !== 'undefined' && /iPhone|iPad|Android|webOS/i.test(navigator.userAgent);
+
+  // Touch handlers for swipe-to-reply + long-press actions
+  const handleTouchStart = useCallback((e, msgId) => {
+    const touch = e.touches[0];
+    touchRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      startTime: Date.now(),
+      isSwiping: false,
+      longPressed: false,
+      longPressTimer: setTimeout(() => {
+        touchRef.current.longPressed = true;
+        // Trigger haptic feedback if available
+        if (navigator.vibrate) navigator.vibrate(30);
+        setActiveMessageId(msgId);
+      }, 500)
+    };
+  }, []);
+
+  const handleTouchMove = useCallback((e, msgId) => {
+    const t = touchRef.current;
+    const touch = e.touches[0];
+    const dx = touch.clientX - t.startX;
+    const dy = touch.clientY - t.startY;
+
+    // If vertical scroll detected, cancel swipe and long press
+    if (Math.abs(dy) > 10 && !t.isSwiping) {
+      clearTimeout(t.longPressTimer);
+      return;
+    }
+
+    // Swipe right detection (only positive direction)
+    if (dx > 10) {
+      clearTimeout(t.longPressTimer);
+      t.isSwiping = true;
+      const clamped = Math.min(dx, 80);
+      setSwipingMsgId(msgId);
+      setSwipeX(clamped);
+    }
+  }, []);
+
+  const handleTouchEnd = useCallback((e, msg) => {
+    const t = touchRef.current;
+    clearTimeout(t.longPressTimer);
+
+    if (t.isSwiping && swipeX > 50) {
+      // Swipe threshold reached — trigger reply
+      handleReplyClick(msg);
+    }
+
+    setSwipingMsgId(null);
+    setSwipeX(0);
+    t.isSwiping = false;
+  }, [swipeX]);
 
   const {
     callStatus, incomingCall, incomingCaller, remoteAudioRef, remoteVideoRef, localVideoRef,
@@ -520,8 +578,25 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
 
                 const isStarred = msg.starredBy?.includes(currentUser.username);
 
+                const msgSwipeStyle = (swipingMsgId === msg._id && swipeX > 0)
+                  ? { transform: `translateX(${swipeX}px)`, transition: 'none' }
+                  : (swipingMsgId !== msg._id) ? { transform: 'translateX(0)', transition: 'transform 200ms ease-out' } : {};
+
                 return (
-                  <div key={item.key} data-msgid={msg._id} className={`message ${isSent ? 'sent' : 'received'} ${msg.deletedForAll ? 'deleted' : ''} ${highlightedMessageId === msg._id ? 'highlighted' : ''} ${msg.pinned ? 'pinned-msg' : ''}`} onClick={() => !msg.deletedForAll && setActiveMessageId(activeMessageId === msg._id ? null : msg._id)}>
+                  <div
+                    key={item.key}
+                    data-msgid={msg._id}
+                    className={`message ${isSent ? 'sent' : 'received'} ${msg.deletedForAll ? 'deleted' : ''} ${highlightedMessageId === msg._id ? 'highlighted' : ''} ${msg.pinned ? 'pinned-msg' : ''}`}
+                    onClick={() => {
+                      if (msg.deletedForAll) return;
+                      if (isMobileDevice) return; // mobile uses long press
+                      setActiveMessageId(activeMessageId === msg._id ? null : msg._id);
+                    }}
+                    onTouchStart={(e) => !msg.deletedForAll && handleTouchStart(e, msg._id)}
+                    onTouchMove={(e) => !msg.deletedForAll && handleTouchMove(e, msg._id)}
+                    onTouchEnd={(e) => !msg.deletedForAll && handleTouchEnd(e, msg)}
+                    style={msgSwipeStyle}
+                  >
                     {msg.media && msg.media.fileId && !msg.deletedForAll ? (
                       <>
                         <MediaMessage message={msg} isOwn={isSent} />

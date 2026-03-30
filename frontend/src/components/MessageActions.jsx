@@ -91,6 +91,7 @@ const MessageActions = ({
   const isStarred = message.starredBy?.includes(currentUsername);
   const isPinned = message.pinned;
 
+  // Compact inline icon bar — identical on desktop and mobile
   return (
     <div className="message-actions" onClick={(e) => e.stopPropagation()}>
       <button className="action-btn reply-btn" onClick={handleReply} disabled={loading} title="Reply">
