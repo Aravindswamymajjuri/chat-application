@@ -16,6 +16,8 @@ const VideoCallScreen = ({
   onToggleMute,
   onToggleSpeaker,
   onToggleVideo,
+  onFlipCamera,
+  facingMode,
   speakerEnabled
 }) => {
   const [formattedTime, setFormattedTime] = useState('00:00');
@@ -107,7 +109,7 @@ const VideoCallScreen = ({
         <div className="local-video-container">
           <video
             ref={localVideoRef}
-            className="local-video"
+            className={`local-video ${facingMode === 'environment' ? 'no-mirror' : ''}`}
             autoPlay={true}
             playsInline
             muted={true}
@@ -176,6 +178,23 @@ const VideoCallScreen = ({
             </svg>
           )}
         </button>
+
+        {/* Flip camera button (only on mobile with video enabled) */}
+        {isVideoEnabled && (
+          <button
+            className="control-btn flip-btn"
+            onClick={onFlipCamera}
+            title={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+            aria-label={facingMode === 'user' ? 'Switch to back camera' : 'Switch to front camera'}
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M20 16v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2v-4"/>
+              <path d="M4 8V4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"/>
+              <polyline points="16 12 12 8 8 12"/>
+              <polyline points="8 12 12 16 16 12"/>
+            </svg>
+          </button>
+        )}
 
         {/* End call button */}
         <button

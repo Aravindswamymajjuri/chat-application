@@ -263,21 +263,46 @@ const ChatPage = ({ currentUser, onLogout, onCurrentUserUpdate }) => {
   return (
     <div className="chat-page">
       <AppLockModal username={currentUser.username} onUnlock={() => { setAppLockSession(currentUser.username); setAppLockModalOpen(false); }} isOpen={appLockModalOpen} />
-      <Settings currentUsername={currentUser.username} isOpen={settingsModalOpen} onClose={() => setSettingsModalOpen(false)} hasAppLock={hasAppLock} onAppLockChange={(e) => setHasAppLock(e)} />
 
-      <div className={`chat-container ${isChatOpen ? 'chat-open' : ''}`}>
+      <div className={`chat-container ${isChatOpen ? 'chat-open' : ''} ${settingsModalOpen ? 'settings-open' : ''}`}>
         <div className="sidebar-panel">
-          <Sidebar currentUser={currentUser} selectedUser={selectedUser} onSelectUser={handleSelectUser} users={users} setUsers={setUsers} unreadCounts={unreadCounts} typingUsers={typingUsers} lastMessageTimes={lastMessageTimes} lastMessages={lastMessages} onSettingsOpen={() => setSettingsModalOpen(true)} onLogout={handleLogout} onProfilePicUpdate={handleProfilePicUpdate} />
+          {/* Mobile: settings replaces sidebar. Desktop: sidebar always visible */}
+          {settingsModalOpen ? (
+            <>
+              {/* Mobile-only: settings inside sidebar */}
+              <div className="sidebar settings-mobile-only">
+                <div className="sidebar-top-header">
+                  <span className="sidebar-app-title">Chattie</span>
+                </div>
+                <Settings currentUsername={currentUser.username} onClose={() => setSettingsModalOpen(false)} hasAppLock={hasAppLock} onAppLockChange={(e) => setHasAppLock(e)} />
+              </div>
+              {/* Desktop-only: keep sidebar visible */}
+              <div className="settings-desktop-sidebar">
+                <Sidebar currentUser={currentUser} selectedUser={selectedUser} onSelectUser={(user) => { setSettingsModalOpen(false); handleSelectUser(user); }} users={users} setUsers={setUsers} unreadCounts={unreadCounts} typingUsers={typingUsers} lastMessageTimes={lastMessageTimes} lastMessages={lastMessages} onSettingsOpen={() => setSettingsModalOpen(true)} onLogout={handleLogout} onProfilePicUpdate={handleProfilePicUpdate} />
+              </div>
+            </>
+          ) : (
+            <Sidebar currentUser={currentUser} selectedUser={selectedUser} onSelectUser={handleSelectUser} users={users} setUsers={setUsers} unreadCounts={unreadCounts} typingUsers={typingUsers} lastMessageTimes={lastMessageTimes} lastMessages={lastMessages} onSettingsOpen={() => setSettingsModalOpen(true)} onLogout={handleLogout} onProfilePicUpdate={handleProfilePicUpdate} />
+          )}
         </div>
         <div className="chat-panel">
-          <ChatWindow currentUser={currentUser} selectedUser={selectedUser} messages={messages} setMessages={setMessages} onReply={handleReply} unreadCounts={unreadCounts} onClearUnread={handleClearUnread} onBack={handleBack} scrollTrigger={scrollTrigger} onMessageDeletedForAll={(otherUsername) => {
-            setLastMessages((prev) => {
-              if (!prev[otherUsername]) return prev;
-              return { ...prev, [otherUsername]: { ...prev[otherUsername], text: 'This message was deleted', deletedForAll: true } };
-            });
-          }} />
-          {selectedUser && (
-            <MessageInput currentUser={currentUser} selectedUser={selectedUser} onMessageSent={handleMessageSent} replyingTo={replyingTo} onReplyCancel={() => setReplyingTo(null)} onMediaMenuToggle={(open) => { if (open) setScrollTrigger(s => s + 1); }} />
+          {/* Desktop: settings in center area. Mobile: hidden when settings open */}
+          {settingsModalOpen ? (
+            <div className="settings-desktop-panel">
+              <Settings currentUsername={currentUser.username} onClose={() => setSettingsModalOpen(false)} hasAppLock={hasAppLock} onAppLockChange={(e) => setHasAppLock(e)} />
+            </div>
+          ) : (
+            <>
+              <ChatWindow currentUser={currentUser} selectedUser={selectedUser} messages={messages} setMessages={setMessages} onReply={handleReply} unreadCounts={unreadCounts} onClearUnread={handleClearUnread} onBack={handleBack} scrollTrigger={scrollTrigger} onMessageDeletedForAll={(otherUsername) => {
+                setLastMessages((prev) => {
+                  if (!prev[otherUsername]) return prev;
+                  return { ...prev, [otherUsername]: { ...prev[otherUsername], text: 'This message was deleted', deletedForAll: true } };
+                });
+              }} />
+              {selectedUser && (
+                <MessageInput currentUser={currentUser} selectedUser={selectedUser} onMessageSent={handleMessageSent} replyingTo={replyingTo} onReplyCancel={() => setReplyingTo(null)} onMediaMenuToggle={(open) => { if (open) setScrollTrigger(s => s + 1); }} />
+              )}
+            </>
           )}
         </div>
       </div>

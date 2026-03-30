@@ -40,6 +40,7 @@ export const useWebRTCVideo = (currentUser, remoteUser) => {
   const [isVideoEnabled, setIsVideoEnabled] = useState(false);
   const [networkQuality, setNetworkQuality] = useState('good');
   const [networkWarning, setNetworkWarning] = useState(null);
+  const [facingMode, setFacingMode] = useState('user');
 
   const callRemoteUserRef = useRef(null);
   const callTypeRef = useRef('audio');
@@ -213,6 +214,43 @@ export const useWebRTCVideo = (currentUser, remoteUser) => {
     setIsVideoEnabled(shouldEnable);
   }, [isVideoEnabled]);
 
+  // Flip camera (front/back)
+  const flipCamera = useCallback(async () => {
+    if (!localStreamRef.current || callTypeRef.current !== 'video') return;
+    const newMode = facingMode === 'user' ? 'environment' : 'user';
+
+    try {
+      // Stop old video tracks
+      localStreamRef.current.getVideoTracks().forEach(t => t.stop());
+
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: newMode }
+      });
+      const newVideoTrack = newStream.getVideoTracks()[0];
+
+      // Replace the track in the peer connection
+      const pc = peerConnectionRef.current;
+      if (pc) {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender) await sender.replaceTrack(newVideoTrack);
+      }
+
+      // Replace in local stream
+      const oldVideoTrack = localStreamRef.current.getVideoTracks()[0];
+      if (oldVideoTrack) localStreamRef.current.removeTrack(oldVideoTrack);
+      localStreamRef.current.addTrack(newVideoTrack);
+
+      // Update local video preview
+      if (localVideoRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+      }
+
+      setFacingMode(newMode);
+    } catch (err) {
+      console.error('❌ Failed to flip camera:', err);
+    }
+  }, [facingMode]);
+
   // Start call (caller side)
   const startCall = useCallback(async (type = 'audio') => {
     try {
@@ -223,7 +261,11 @@ export const useWebRTCVideo = (currentUser, remoteUser) => {
       callTypeRef.current = type;
       remoteDescSetRef.current = false;
       iceCandidatesRef.current = [];
+      setSpeakerEnabled(false);
+      setIsMuted(false);
+      // Set these BEFORE getLocalStream so VideoCallScreen mounts and refs are ready
       setIsVideoEnabled(type === 'video');
+      setCallStatus('calling');
 
       await getLocalStream(type);
       const pc = createPeerConnection();
@@ -233,8 +275,6 @@ export const useWebRTCVideo = (currentUser, remoteUser) => {
         offerToReceiveVideo: type === 'video'
       });
       await pc.setLocalDescription(offer);
-
-      setCallStatus('calling');
 
       getSocket().emit('call-user', {
         to: remoteUser,
@@ -288,6 +328,11 @@ export const useWebRTCVideo = (currentUser, remoteUser) => {
   const acceptCall = useCallback(async () => {
     try {
       setIncomingCall(false);
+      setSpeakerEnabled(false);
+      setIsMuted(false);
+      // Set video enabled BEFORE getting stream so the <video> element mounts in time
+      setIsVideoEnabled(callTypeRef.current === 'video');
+      setCallStatus('connected');
 
       const pc = peerConnectionRef.current;
       if (!pc) { console.error('❌ No peer connection'); return; }
@@ -300,9 +345,6 @@ export const useWebRTCVideo = (currentUser, remoteUser) => {
         offerToReceiveVideo: callTypeRef.current === 'video'
       });
       await pc.setLocalDescription(answer);
-
-      setCallStatus('connected');
-      setIsVideoEnabled(callTypeRef.current === 'video');
 
       callStartTimeRef.current = Date.now();
       setCallDuration(0);
@@ -483,6 +525,24 @@ export const useWebRTCVideo = (currentUser, remoteUser) => {
     });
   }, [EARPIECE_VOLUME]);
 
+  // Re-attach streams when video elements mount (fixes timing issue where
+  // getLocalStream / track event fires before the <video> elements are in the DOM)
+  useEffect(() => {
+    // Attach local video preview when the element becomes available
+    if (isVideoEnabled && localStreamRef.current && localVideoRef.current) {
+      if (localVideoRef.current.srcObject !== localStreamRef.current) {
+        localVideoRef.current.srcObject = localStreamRef.current;
+        localVideoRef.current.play().catch(() => {});
+        console.log('🎥 Local video re-attached after mount');
+      }
+    }
+
+    // Attach remote video/audio when elements become available
+    if (callStatus && remoteStreamRef.current) {
+      attachRemoteStreams();
+    }
+  }, [callStatus, isVideoEnabled, attachRemoteStreams]);
+
   return {
     callStatus, incomingCall, incomingCaller, incomingCallType,
     callDuration, isMuted, speakerEnabled, isVideoEnabled,
@@ -491,7 +551,7 @@ export const useWebRTCVideo = (currentUser, remoteUser) => {
     remoteAudioRef, remoteVideoRef, localVideoRef,
     startCall, acceptCall, rejectCall, endCall,
     handleOffer, handleAnswer, handleIceCandidate, handleRemoteEndCall,
-    toggleMute, toggleSpeaker, toggleVideo, cleanup
+    toggleMute, toggleSpeaker, toggleVideo, flipCamera, facingMode, cleanup
   };
 };
 

@@ -54,6 +54,15 @@
   transform: scaleX(-1); /* Mirror the local video */
 }
 
+.local-video.no-mirror {
+  transform: scaleX(1); /* Back camera — no mirror */
+}
+
+/* Flip camera button */
+.flip-btn {
+  background: rgba(255, 255, 255, 0.2) !important;
+}
+
 /* Call info overlay */
 .call-info-overlay {
   position: absolute;

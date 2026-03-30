@@ -10,12 +10,11 @@ import VideoCallScreen from './VideoCallScreen';
 import IncomingCallPopup from './IncomingCallPopup';
 import CallHistory from './CallHistory';
 import MediaMessage from './MediaMessage';
-import CallTypeSelector from './CallTypeSelector';
+// CallTypeSelector removed — call buttons now inline in header
 import { useWebRTCVideo } from '../hooks/useWebRTCVideo';
 import '../styles/ChatWindow.css';
 import '../styles/MediaMessage.css';
 import '../styles/VideoCallScreen.css';
-import '../styles/CallTypeSelector.css';
 
 const URL_REGEX = /(?:https?:\/\/|www\.)[-a-zA-Z0-9@:%._+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b[-a-zA-Z0-9()@:%_+.~#?&/=]*/gi;
 
@@ -64,7 +63,7 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
   const [showCallHistory, setShowCallHistory] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  const [showCallTypeSelector, setShowCallTypeSelector] = useState(false);
+  // CallTypeSelector removed — audio/video icons now directly in header
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -74,7 +73,7 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
     startCall, acceptCall, rejectCall, endCall, handleRemoteEndCall,
     handleOffer, handleAnswer, handleIceCandidate, cleanup,
     callDuration, isMuted, speakerEnabled, networkQuality, networkWarning,
-    toggleMute, toggleSpeaker, toggleVideo, isVideoEnabled, callType
+    toggleMute, toggleSpeaker, toggleVideo, flipCamera, facingMode, isVideoEnabled, callType
   } = useWebRTCVideo(currentUser.username, selectedUser?.username);
 
   const handleScroll = useCallback(() => {
@@ -259,19 +258,14 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
     onReply?.({ id: message._id, text: message.text, sender: message.sender });
   };
 
-  const handleStartCall = () => {
-    if (selectedUser.isOnline) setShowCallTypeSelector(true);
+  const handleStartAudioCall = () => {
+    if (selectedUser.isOnline) startCall('audio');
     else alert(`${selectedUser.username} is offline`);
   };
 
-  const handleSelectAudioCall = () => {
-    setShowCallTypeSelector(false);
-    startCall('audio');
-  };
-
-  const handleSelectVideoCall = () => {
-    setShowCallTypeSelector(false);
-    startCall('video');
+  const handleStartVideoCall = () => {
+    if (selectedUser.isOnline) startCall('video');
+    else alert(`${selectedUser.username} is offline`);
   };
 
   const groupedMessages = useMemo(() => {
@@ -312,10 +306,9 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
 
   return (
     <div className="chat-window">
-      {callType === 'video' && callStatus && <VideoCallScreen callStatus={callStatus} remoteUser={selectedUser.username} onEndCall={endCall} remoteAudioRef={remoteAudioRef} remoteVideoRef={remoteVideoRef} localVideoRef={localVideoRef} isMuted={isMuted} callDuration={callDuration} networkQuality={networkQuality} networkWarning={networkWarning} onToggleMute={toggleMute} onToggleSpeaker={toggleSpeaker} onToggleVideo={toggleVideo} isVideoEnabled={isVideoEnabled} speakerEnabled={speakerEnabled} />}
+      {callType === 'video' && callStatus && <VideoCallScreen callStatus={callStatus} remoteUser={selectedUser.username} onEndCall={endCall} remoteAudioRef={remoteAudioRef} remoteVideoRef={remoteVideoRef} localVideoRef={localVideoRef} isMuted={isMuted} callDuration={callDuration} networkQuality={networkQuality} networkWarning={networkWarning} onToggleMute={toggleMute} onToggleSpeaker={toggleSpeaker} onToggleVideo={toggleVideo} onFlipCamera={flipCamera} facingMode={facingMode} isVideoEnabled={isVideoEnabled} speakerEnabled={speakerEnabled} />}
       {callType === 'audio' && callStatus && <CallScreen callStatus={callStatus} remoteUser={selectedUser.username} onEndCall={endCall} remoteAudioRef={remoteAudioRef} isMuted={isMuted} callDuration={callDuration} networkQuality={networkQuality} networkWarning={networkWarning} onToggleMute={toggleMute} onToggleSpeaker={toggleSpeaker} speakerEnabled={speakerEnabled} />}
       {incomingCall && <IncomingCallPopup caller={incomingCaller} onAccept={acceptCall} onReject={rejectCall} callType={callType} />}
-      {showCallTypeSelector && <CallTypeSelector recipientName={selectedUser.username} onSelectAudio={handleSelectAudioCall} onSelectVideo={handleSelectVideoCall} onCancel={() => setShowCallTypeSelector(false)} />}
 
       {/* Chat header with back arrow */}
       <div className="chat-header">
@@ -350,12 +343,18 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
           </div>
         </div>
         <div className="header-actions">
-          <button className="chat-header-btn" onClick={handleStartCall} disabled={!selectedUser.isOnline || callStatus} aria-label="Voice call">
+          <button className="chat-header-btn" onClick={handleStartVideoCall} disabled={!selectedUser.isOnline || !!callStatus} aria-label="Video call" title="Video call">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polygon points="23 7 16 12 23 17 23 7"/>
+              <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
+            </svg>
+          </button>
+          <button className="chat-header-btn" onClick={handleStartAudioCall} disabled={!selectedUser.isOnline || !!callStatus} aria-label="Voice call" title="Voice call">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
             </svg>
           </button>
-          <button className={`chat-header-btn ${showCallHistory ? 'active' : ''}`} onClick={() => setShowCallHistory(!showCallHistory)} aria-label="Call history">
+          <button className={`chat-header-btn ${showCallHistory ? 'active' : ''}`} onClick={() => setShowCallHistory(!showCallHistory)} aria-label="Call history" title="Call history">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
             </svg>

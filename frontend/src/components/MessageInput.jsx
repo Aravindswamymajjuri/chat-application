@@ -22,6 +22,13 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
     inputRef.current?.focus();
   }, [selectedUser?.username]);
 
+  // Focus input when replying to a message
+  useEffect(() => {
+    if (replyingTo) {
+      inputRef.current?.focus();
+    }
+  }, [replyingTo]);
+
   // Auto-grow textarea only when text wraps past the first line
   useEffect(() => {
     const el = inputRef.current;
