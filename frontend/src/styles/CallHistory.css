@@ -40,6 +40,23 @@
   gap: 7px;
 }
 
+.call-history-back {
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary);
+  border-radius: var(--radius-full);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background var(--transition);
+}
+.call-history-back:hover { background: var(--bg-hover); }
+.call-history-back svg { width: 18px; height: 18px; }
+
 .call-history-header h3 svg {
   width: 16px;
   height: 16px;

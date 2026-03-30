@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { getSocket } from '../utils/socket';
-import { callAPI } from '../utils/api';
+import { callAPI, chatAPI } from '../utils/api';
 
 const STUN_SERVERS = [
   'stun:stun.l.google.com:19302',
@@ -479,32 +479,48 @@ export const useWebRTCVideo = (currentUser, remoteUser) => {
     if (localVideoRef.current) localVideoRef.current.srcObject = null;
   }, []);
 
+  // Save call record + call event message in chat
+  const saveCallRecord = useCallback((target, duration, status) => {
+    const type = callTypeRef.current || 'audio';
+    callAPI.saveCall(currentUser, target, duration, status).catch(() => {});
+    chatAPI.saveCallEvent(currentUser, target, type, duration, status).catch(() => {});
+  }, [currentUser]);
+
   // Reject call
   const rejectCall = useCallback(() => {
+    const caller = incomingCaller;
     setIncomingCall(false);
     setIncomingCaller(null);
     setCallStatus(null);
-    getSocket().emit('end-call', { to: incomingCaller, from: currentUser, reason: 'rejected' });
+    getSocket().emit('end-call', { to: caller, from: currentUser, reason: 'rejected' });
     cleanup();
-  }, [incomingCaller, currentUser, cleanup]);
+    // Save as rejected call
+    if (caller) saveCallRecord(caller, 0, 'rejected');
+  }, [incomingCaller, currentUser, cleanup, saveCallRecord]);
 
   // End call
   const endCall = useCallback(() => {
+    const duration = callStartTimeRef.current ? Math.floor((Date.now() - callStartTimeRef.current) / 1000) : 0;
+    const target = callRemoteUserRef.current || incomingCaller || remoteUser;
     setCallStatus('ended');
     setIncomingCall(false);
-    const target = callRemoteUserRef.current || incomingCaller || remoteUser;
     getSocket().emit('end-call', { to: target, from: currentUser });
     cleanup();
+    // Save call record
+    if (target) saveCallRecord(target, duration, duration > 0 ? 'completed' : 'missed');
     setTimeout(() => { setCallStatus(null); setCallDuration(0); setNetworkWarning(null); }, 1000);
-  }, [remoteUser, incomingCaller, currentUser, cleanup]);
+  }, [remoteUser, incomingCaller, currentUser, cleanup, saveCallRecord]);
 
   // Handle remote end call
   const handleRemoteEndCall = useCallback(() => {
+    const duration = callStartTimeRef.current ? Math.floor((Date.now() - callStartTimeRef.current) / 1000) : 0;
+    const target = callRemoteUserRef.current || incomingCaller || remoteUser;
     setCallStatus('ended');
     setIncomingCall(false);
     cleanup();
+    // Don't save from receiver side — caller already saved it
     setTimeout(() => { setCallStatus(null); setCallDuration(0); setNetworkWarning(null); }, 1000);
-  }, [cleanup]);
+  }, [cleanup, remoteUser, incomingCaller]);
 
   // Mute/unmute
   const toggleMute = useCallback(() => {

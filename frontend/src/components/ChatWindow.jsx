@@ -2,7 +2,8 @@ import React, { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { chatAPI, mediaAPI } from '../utils/api';
 import {
   onReceiveMessage, onDeleteMessage, onDeleteMessageForMe, onTypingIndicator,
-  onStopTyping, onMessageStatusUpdated, onCallUser, onAnswerCall, onIceCandidate, onEndCall, emitMessageSeen, emitMessageDelivered, emitClearUnreadCount
+  onStopTyping, onMessageStatusUpdated, onCallUser, onAnswerCall, onIceCandidate, onEndCall, emitMessageSeen, emitMessageDelivered, emitClearUnreadCount,
+  onMessageEdited, onMessagePinned
 } from '../utils/socket';
 import MessageActions from './MessageActions';
 import CallScreen from './CallScreen';
@@ -57,14 +58,16 @@ const DoubleTick = () => (
   </svg>
 );
 
-const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply, unreadCounts, onClearUnread, onBack, scrollTrigger, onMessageDeletedForAll }) => {
+const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply, onEdit, unreadCounts, onClearUnread, onBack, scrollTrigger, onMessageDeletedForAll }) => {
   const [loading, setLoading] = useState(false);
   const [activeMessageId, setActiveMessageId] = useState(null);
-  const [showCallHistory, setShowCallHistory] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   const [showScrollBtn, setShowScrollBtn] = useState(false);
-  // CallTypeSelector removed — audio/video icons now directly in header
   const [highlightedMessageId, setHighlightedMessageId] = useState(null);
+  const [pinnedMessages, setPinnedMessages] = useState([]);
+  const [showMenu, setShowMenu] = useState(false);
+  const [activePanel, setActivePanel] = useState(null); // 'pinned' | 'starred' | 'callHistory' | null
+  const [starredMessages, setStarredMessages] = useState([]);
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
 
@@ -202,6 +205,37 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
   useEffect(() => { return onIceCandidate((d) => handleIceCandidate(d.candidate)); }, [handleIceCandidate]);
   useEffect(() => { return onEndCall(() => handleRemoteEndCall()); }, [handleRemoteEndCall]);
 
+  // Listen for message edits
+  useEffect(() => {
+    return onMessageEdited((d) => {
+      setMessages((prev) => prev.map((m) =>
+        String(m._id) === String(d.messageId) ? { ...m, text: d.text, editedAt: d.editedAt } : m
+      ));
+    });
+  }, [setMessages]);
+
+  // Listen for message pin/unpin
+  useEffect(() => {
+    return onMessagePinned((d) => {
+      setMessages((prev) => prev.map((m) =>
+        String(m._id) === String(d.messageId) ? { ...m, pinned: d.pinned, pinnedBy: d.pinnedBy } : m
+      ));
+      setPinnedMessages((prev) => {
+        if (d.pinned) return [d.message, ...prev.filter(m => String(m._id) !== String(d.messageId))];
+        return prev.filter(m => String(m._id) !== String(d.messageId));
+      });
+    });
+  }, [setMessages]);
+
+  // Fetch pinned messages when chat opens
+  useEffect(() => {
+    if (selectedUser) {
+      chatAPI.getPinnedMessages(currentUser.username, selectedUser.username)
+        .then(res => setPinnedMessages(res.data || []))
+        .catch(() => setPinnedMessages([]));
+    }
+  }, [selectedUser?.username, currentUser.username]);
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
@@ -256,6 +290,40 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
 
   const handleReplyClick = (message) => {
     onReply?.({ id: message._id, text: message.text, sender: message.sender });
+  };
+
+  const handleEditClick = (message) => {
+    onEdit?.({ id: message._id, text: message.text, sender: message.sender });
+  };
+
+  const handleStarToggle = (messageId, username) => {
+    setMessages((prev) => prev.map((m) => {
+      if (String(m._id) !== String(messageId)) return m;
+      const starred = m.starredBy || [];
+      const isStarred = starred.includes(username);
+      return { ...m, starredBy: isStarred ? starred.filter(u => u !== username) : [...starred, username] };
+    }));
+  };
+
+  const handlePinToggle = (messageId) => {
+    // UI update happens via socket event (onMessagePinned)
+  };
+
+  const openPanel = async (panel) => {
+    setShowMenu(false);
+    if (activePanel === panel) { setActivePanel(null); return; }
+    setActivePanel(panel);
+    if (panel === 'starred') {
+      try {
+        const res = await chatAPI.getStarredMessages(currentUser.username);
+        // Filter to only this conversation
+        const convoStarred = (res.data || []).filter(m =>
+          (m.sender === selectedUser.username && m.receiver === currentUser.username) ||
+          (m.sender === currentUser.username && m.receiver === selectedUser.username)
+        );
+        setStarredMessages(convoStarred);
+      } catch { setStarredMessages([]); }
+    }
   };
 
   const handleStartAudioCall = () => {
@@ -354,13 +422,41 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
               <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>
             </svg>
           </button>
-          <button className={`chat-header-btn ${showCallHistory ? 'active' : ''}`} onClick={() => setShowCallHistory(!showCallHistory)} aria-label="Call history" title="Call history">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
-            </svg>
-          </button>
+          <div className="header-menu-wrap">
+            <button className={`chat-header-btn ${showMenu ? 'active' : ''}`} onClick={() => setShowMenu(!showMenu)} aria-label="More options" title="More">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20">
+                <circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/>
+              </svg>
+            </button>
+            {showMenu && (
+              <div className="header-dropdown" onClick={() => setShowMenu(false)}>
+                <button className="dropdown-item" onClick={() => openPanel('pinned')}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
+                  Pinned texts
+                  {pinnedMessages.length > 0 && <span className="dropdown-badge">{pinnedMessages.length}</span>}
+                </button>
+                <button className="dropdown-item" onClick={() => openPanel('starred')}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                  Starred Messages
+                </button>
+                <button className="dropdown-item" onClick={() => openPanel('callHistory')}>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  Call History
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
+
+      {/* Most recent pinned message below header */}
+      {pinnedMessages.length > 0 && (
+        <div className="pinned-bar" onClick={() => scrollToReplyOriginal(pinnedMessages[0]._id)}>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" width="14" height="14" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
+          <span className="pinned-bar-text">{pinnedMessages[0].text}</span>
+          {pinnedMessages.length > 1 && <span className="pinned-bar-count">{pinnedMessages.length}</span>}
+        </div>
+      )}
 
       <div className="chat-content-wrapper">
         <div className="messages-container" ref={messagesContainerRef}>
@@ -402,12 +498,36 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
                   console.warn('⚠️ Message text has attachment emoji but no media field:', msg.text, msg);
                 }
                 
+                // Call event messages — centered, no bubble
+                if (msg.callEvent) {
+                  const ce = msg.callEvent;
+                  const isVideo = ce.callType === 'video';
+                  const isMissed = ce.status === 'missed' || ce.status === 'rejected';
+                  return (
+                    <div key={item.key} className="call-event-msg">
+                      <div className={`call-event-icon ${isMissed ? 'missed' : 'completed'}`}>
+                        {isVideo ? (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                        ) : (
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+                        )}
+                      </div>
+                      <span className="call-event-text">{msg.text}</span>
+                      <span className="call-event-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </div>
+                  );
+                }
+
+                const isStarred = msg.starredBy?.includes(currentUser.username);
+
                 return (
-                  <div key={item.key} data-msgid={msg._id} className={`message ${isSent ? 'sent' : 'received'} ${msg.deletedForAll ? 'deleted' : ''} ${highlightedMessageId === msg._id ? 'highlighted' : ''}`} onClick={() => !msg.deletedForAll && setActiveMessageId(activeMessageId === msg._id ? null : msg._id)}>
+                  <div key={item.key} data-msgid={msg._id} className={`message ${isSent ? 'sent' : 'received'} ${msg.deletedForAll ? 'deleted' : ''} ${highlightedMessageId === msg._id ? 'highlighted' : ''} ${msg.pinned ? 'pinned-msg' : ''}`} onClick={() => !msg.deletedForAll && setActiveMessageId(activeMessageId === msg._id ? null : msg._id)}>
                     {msg.media && msg.media.fileId && !msg.deletedForAll ? (
                       <>
                         <MediaMessage message={msg} isOwn={isSent} />
                         <div className="message-footer" style={{ paddingLeft: '12px', marginTop: '4px' }}>
+                          {isStarred && <span className="star-indicator">&#9733;</span>}
+                          {msg.editedAt && <span className="edited-label">edited</span>}
                           <span className="message-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           {isSent && (
                             <span className={`tick-icon ${msg.status}`}>
@@ -436,6 +556,8 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
                           ) : linkifyText(msg.text)}
                         </div>
                         <div className="message-footer">
+                          {isStarred && <span className="star-indicator">&#9733;</span>}
+                          {msg.editedAt && <span className="edited-label">edited</span>}
                           <span className="message-time">{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                           {isSent && (
                             <span className={`tick-icon ${msg.status}`}>
@@ -446,8 +568,8 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
                         </div>
                       </div>
                     )}
-                    {activeMessageId === msg._id && !msg.deletedForAll && (
-                      <MessageActions messageId={msg._id} message={msg} currentUsername={currentUser.username} isOwnMessage={isSent} onDelete={handleDeleteMessage} onReply={handleReplyClick} onClose={() => setActiveMessageId(null)} />
+                    {activeMessageId === msg._id && !msg.deletedForAll && !msg.callEvent && (
+                      <MessageActions messageId={msg._id} message={msg} currentUsername={currentUser.username} isOwnMessage={isSent} onDelete={handleDeleteMessage} onReply={handleReplyClick} onEdit={handleEditClick} onStar={handleStarToggle} onPin={handlePinToggle} onClose={() => setActiveMessageId(null)} />
                     )}
                   </div>
                 );
@@ -470,7 +592,57 @@ const ChatWindow = ({ currentUser, selectedUser, messages, setMessages, onReply,
           </button>
         )}
 
-        {showCallHistory && <CallHistory currentUser={currentUser} selectedUser={selectedUser} />}
+        {/* Slide-in panel for Pinned / Starred / Call History */}
+        {activePanel === 'callHistory' && <CallHistory currentUser={currentUser} selectedUser={selectedUser} onClose={() => setActivePanel(null)} />}
+        {activePanel === 'pinned' && (
+          <div className="side-panel">
+            <div className="side-panel-header">
+              <button className="side-panel-back" onClick={() => setActivePanel(null)} aria-label="Back">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <h3>Pinned Messages</h3>
+              <span className="side-panel-count">{pinnedMessages.length}</span>
+            </div>
+            <div className="side-panel-list">
+              {pinnedMessages.length === 0 ? (
+                <div className="side-panel-empty">No pinned messages</div>
+              ) : pinnedMessages.map((pm) => (
+                <div key={pm._id} className="side-panel-item" onClick={() => { scrollToReplyOriginal(pm._id); setActivePanel(null); }}>
+                  <div className="side-panel-item-row">
+                    <span className="side-panel-item-sender">{pm.sender === currentUser.username ? 'You' : pm.sender}</span>
+                    <span className="side-panel-item-time">{new Date(pm.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}, {new Date(pm.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <div className="side-panel-item-text">{pm.text}</div>
+                  {pm.pinnedBy && <div className="side-panel-item-meta">Pinned by {pm.pinnedBy === currentUser.username ? 'you' : pm.pinnedBy}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {activePanel === 'starred' && (
+          <div className="side-panel">
+            <div className="side-panel-header">
+              <button className="side-panel-back" onClick={() => setActivePanel(null)} aria-label="Back">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+              </button>
+              <h3>Starred Messages</h3>
+              <span className="side-panel-count">{starredMessages.length}</span>
+            </div>
+            <div className="side-panel-list">
+              {starredMessages.length === 0 ? (
+                <div className="side-panel-empty">No starred messages</div>
+              ) : starredMessages.map((sm) => (
+                <div key={sm._id} className="side-panel-item" onClick={() => { scrollToReplyOriginal(sm._id); setActivePanel(null); }}>
+                  <div className="side-panel-item-row">
+                    <span className="side-panel-item-sender">{sm.sender === currentUser.username ? 'You' : sm.sender}</span>
+                    <span className="side-panel-item-time">{new Date(sm.timestamp).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}, {new Date(sm.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                  </div>
+                  <div className="side-panel-item-text">{sm.text}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

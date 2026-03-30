@@ -255,6 +255,20 @@ export const onDeleteMessageForMe = (callback) => {
   return () => socket.off('message_deleted_for_me', callback);
 };
 
+// Message edit event
+export const onMessageEdited = (callback) => {
+  const socket = getSocket();
+  socket.on('message_edited', callback);
+  return () => socket.off('message_edited', callback);
+};
+
+// Message pin event
+export const onMessagePinned = (callback) => {
+  const socket = getSocket();
+  socket.on('message_pinned', callback);
+  return () => socket.off('message_pinned', callback);
+};
+
 // WebRTC Call Events
 export const emitCallUser = (to, from, offer, callType = 'audio') => {
   const socket = getSocket();

@@ -64,7 +64,24 @@ export const chatAPI = {
   deleteMessageForMe: (messageId, username) =>
     axios.post(`${API_BASE_URL}/chat/messages/delete-for-me`, { messageId, username }),
 
-  // Debug: Check message structure and media fields
+  editMessage: (messageId, text, username) =>
+    axios.put(`${API_BASE_URL}/chat/messages/${messageId}/edit`, { text, username }),
+
+  toggleStar: (messageId, username) =>
+    axios.post(`${API_BASE_URL}/chat/messages/${messageId}/star`, { username }),
+
+  getStarredMessages: (username) =>
+    axios.get(`${API_BASE_URL}/chat/starred/${username}`),
+
+  togglePin: (messageId, username) =>
+    axios.post(`${API_BASE_URL}/chat/messages/${messageId}/pin`, { username }),
+
+  getPinnedMessages: (user1, user2) =>
+    axios.get(`${API_BASE_URL}/chat/pinned`, { params: { user1, user2 } }),
+
+  saveCallEvent: (sender, receiver, callType, duration, status) =>
+    axios.post(`${API_BASE_URL}/chat/call-event`, { sender, receiver, callType, duration, status }),
+
   debugMessagesWithMedia: (sender, receiver) =>
     axios.get(`${API_BASE_URL}/chat/debug/messages`, { params: { sender, receiver } })
 };

@@ -90,7 +90,13 @@ exports.getMessages = async (req, res) => {
         deletedFor: msg.deletedFor || [],
         deletedForAll: msg.deletedForAll || false,
         replyTo: msg.replyTo || null,
-        media: msg.media || null
+        media: msg.media || null,
+        editedAt: msg.editedAt || null,
+        starredBy: msg.starredBy || [],
+        pinned: msg.pinned || false,
+        pinnedAt: msg.pinnedAt || null,
+        pinnedBy: msg.pinnedBy || null,
+        callEvent: msg.callEvent || null
       };
 
       if (msg.deletedFor && msg.deletedFor.includes(sender)) {
@@ -221,6 +227,181 @@ exports.deleteMessageForMe = async (req, res) => {
     res.status(200).json({ message: 'Message deleted for you', data: message });
   } catch (error) {
     res.status(500).json({ message: 'Error deleting message', error: error.message });
+  }
+};
+
+// Edit message (24-hour limit)
+exports.editMessage = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { text, username } = req.body;
+    if (!messageId || !text || !username) return res.status(400).json({ message: 'messageId, text, and username required' });
+
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ message: 'Message not found' });
+    if (message.sender !== username) return res.status(403).json({ message: 'You can only edit your own messages' });
+    if (message.deletedForAll) return res.status(400).json({ message: 'Cannot edit deleted message' });
+    if (message.media) return res.status(400).json({ message: 'Cannot edit media messages' });
+
+    // 24-hour limit
+    const hoursSince = (Date.now() - new Date(message.timestamp).getTime()) / (1000 * 60 * 60);
+    if (hoursSince > 24) return res.status(400).json({ message: 'Edit window expired (24 hours)' });
+
+    if (!message.originalText) message.originalText = message.text;
+    message.text = text;
+    message.editedAt = new Date();
+    await message.save();
+
+    const msgObj = message.toObject();
+
+    // Notify both users in real-time
+    if (io) {
+      const editData = { messageId, text, editedAt: msgObj.editedAt, sender: message.sender, receiver: message.receiver };
+      io.to(`user_${message.sender}`).emit('message_edited', editData);
+      io.to(`user_${message.receiver}`).emit('message_edited', editData);
+      const senderSid = connectedUsers?.[message.sender];
+      const receiverSid = connectedUsers?.[message.receiver];
+      if (senderSid) io.to(senderSid).emit('message_edited', editData);
+      if (receiverSid) io.to(receiverSid).emit('message_edited', editData);
+    }
+
+    res.status(200).json({ message: 'Message edited', data: msgObj });
+  } catch (error) {
+    res.status(500).json({ message: 'Error editing message', error: error.message });
+  }
+};
+
+// Toggle star on a message
+exports.toggleStar = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { username } = req.body;
+    if (!messageId || !username) return res.status(400).json({ message: 'messageId and username required' });
+
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ message: 'Message not found' });
+
+    const isStarred = message.starredBy.includes(username);
+    if (isStarred) {
+      message.starredBy = message.starredBy.filter(u => u !== username);
+    } else {
+      message.starredBy.push(username);
+    }
+    await message.save();
+
+    res.status(200).json({ message: isStarred ? 'Unstarred' : 'Starred', starred: !isStarred });
+  } catch (error) {
+    res.status(500).json({ message: 'Error toggling star', error: error.message });
+  }
+};
+
+// Get starred messages for a user
+exports.getStarredMessages = async (req, res) => {
+  try {
+    const { username } = req.params;
+    const messages = await Message.find({
+      starredBy: username,
+      deletedForAll: { $ne: true }
+    }).sort({ timestamp: -1 }).limit(100);
+    res.status(200).json(messages);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching starred messages', error: error.message });
+  }
+};
+
+// Pin/unpin a message
+exports.togglePin = async (req, res) => {
+  try {
+    const { messageId } = req.params;
+    const { username } = req.body;
+    if (!messageId || !username) return res.status(400).json({ message: 'messageId and username required' });
+
+    const message = await Message.findById(messageId);
+    if (!message) return res.status(404).json({ message: 'Message not found' });
+
+    const wasPinned = message.pinned;
+
+    message.pinned = !wasPinned;
+    message.pinnedAt = wasPinned ? null : new Date();
+    message.pinnedBy = wasPinned ? null : username;
+    await message.save();
+
+    const msgObj = message.toObject();
+
+    // Notify both users
+    if (io) {
+      const pinData = { messageId, pinned: message.pinned, pinnedBy: username, message: msgObj };
+      io.to(`user_${message.sender}`).emit('message_pinned', pinData);
+      io.to(`user_${message.receiver}`).emit('message_pinned', pinData);
+      const senderSid = connectedUsers?.[message.sender];
+      const receiverSid = connectedUsers?.[message.receiver];
+      if (senderSid) io.to(senderSid).emit('message_pinned', pinData);
+      if (receiverSid) io.to(receiverSid).emit('message_pinned', pinData);
+    }
+
+    res.status(200).json({ message: wasPinned ? 'Unpinned' : 'Pinned', data: msgObj });
+  } catch (error) {
+    res.status(500).json({ message: 'Error toggling pin', error: error.message });
+  }
+};
+
+// Get all pinned messages for a conversation
+exports.getPinnedMessages = async (req, res) => {
+  try {
+    const { user1, user2 } = req.query;
+    if (!user1 || !user2) return res.status(400).json({ message: 'user1 and user2 required' });
+
+    const pinned = await Message.find({
+      $or: [
+        { sender: user1, receiver: user2 },
+        { sender: user2, receiver: user1 }
+      ],
+      pinned: true,
+      deletedForAll: { $ne: true }
+    }).sort({ pinnedAt: -1 });
+
+    res.status(200).json(pinned);
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching pinned message', error: error.message });
+  }
+};
+
+// Save a call event as a chat message
+exports.saveCallEvent = async (req, res) => {
+  try {
+    const { sender, receiver, callType, duration, status } = req.body;
+    if (!sender || !receiver) return res.status(400).json({ message: 'sender and receiver required' });
+
+    const statusText = status === 'missed' ? 'Missed' : status === 'rejected' ? 'Declined' : '';
+    const typeText = callType === 'video' ? 'Video call' : 'Voice call';
+    const durationMin = Math.floor(duration / 60);
+    const durationSec = duration % 60;
+    const durationText = duration > 0 ? ` (${durationMin}:${String(durationSec).padStart(2, '0')})` : '';
+    const text = `${statusText ? statusText + ' ' : ''}${typeText}${durationText}`;
+
+    const message = new Message({
+      sender,
+      receiver,
+      text,
+      timestamp: new Date(),
+      callEvent: { callType: callType || 'audio', duration: duration || 0, status: status || 'completed' }
+    });
+    await message.save();
+    const msgObj = message.toObject();
+
+    // Emit to both users
+    if (io) {
+      io.to(`user_${receiver}`).emit('receive_message', msgObj);
+      io.to(`user_${sender}`).emit('receive_message', msgObj);
+      const receiverSid = connectedUsers?.[receiver];
+      const senderSid = connectedUsers?.[sender];
+      if (receiverSid) io.to(receiverSid).emit('receive_message', msgObj);
+      if (senderSid) io.to(senderSid).emit('receive_message', msgObj);
+    }
+
+    res.status(201).json({ data: msgObj });
+  } catch (error) {
+    res.status(500).json({ message: 'Error saving call event', error: error.message });
   }
 };
 

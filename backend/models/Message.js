@@ -35,6 +35,42 @@ const messageSchema = new mongoose.Schema({
     text: String,
     sender: String
   },
+  // Edit support
+  editedAt: {
+    type: Date,
+    default: null
+  },
+  originalText: {
+    type: String,
+    default: null
+  },
+  // Star support — array of usernames who starred this message
+  starredBy: {
+    type: [String],
+    default: []
+  },
+  // Pin support
+  pinned: {
+    type: Boolean,
+    default: false
+  },
+  pinnedAt: {
+    type: Date,
+    default: null
+  },
+  pinnedBy: {
+    type: String,
+    default: null
+  },
+  // Call event message support
+  callEvent: {
+    type: {
+      callType: { type: String, enum: ['audio', 'video'], default: 'audio' },
+      duration: { type: Number, default: 0 },
+      status: { type: String, enum: ['completed', 'missed', 'rejected'], default: 'completed' }
+    },
+    default: null
+  },
   // Media support
   media: {
     type: {

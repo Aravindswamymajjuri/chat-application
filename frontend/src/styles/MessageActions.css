@@ -16,8 +16,11 @@
   animation: maBtnPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 .message-actions .action-btn:nth-child(1) { animation-delay: 0s; }
-.message-actions .action-btn:nth-child(2) { animation-delay: 0.06s; }
-.message-actions .action-btn:nth-child(3) { animation-delay: 0.12s; }
+.message-actions .action-btn:nth-child(2) { animation-delay: 0.04s; }
+.message-actions .action-btn:nth-child(3) { animation-delay: 0.08s; }
+.message-actions .action-btn:nth-child(4) { animation-delay: 0.12s; }
+.message-actions .action-btn:nth-child(5) { animation-delay: 0.16s; }
+.message-actions .action-btn:nth-child(6) { animation-delay: 0.20s; }
 
 @keyframes maBtnPop {
   from { opacity: 0; transform: scale(0.3); }
@@ -60,6 +63,11 @@
 }
 
 .reply-btn svg { color: var(--primary); }
+.edit-btn svg { color: var(--primary); }
+.star-btn svg { color: #f0a500; }
+.star-btn.active svg { color: #f0a500; }
+.pin-btn svg { color: var(--text-secondary); }
+.pin-btn.active svg { color: var(--primary); }
 .delete-for-me-btn svg { color: var(--text-light); }
 .delete-all-btn svg { color: var(--color-danger); }
 

@@ -5,7 +5,7 @@ import ReplyPreview from './ReplyPreview';
 import MediaActions, { MediaPopup } from './MediaActions';
 import '../styles/MessageInput.css';
 
-const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, onReplyCancel, onMediaMenuToggle }) => {
+const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, onReplyCancel, editingMessage, onEditCancel, onEditDone, onMediaMenuToggle }) => {
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
@@ -28,6 +28,14 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
       inputRef.current?.focus();
     }
   }, [replyingTo]);
+
+  // Edit mode — populate text and focus
+  useEffect(() => {
+    if (editingMessage) {
+      setText(editingMessage.text);
+      setTimeout(() => inputRef.current?.focus(), 50);
+    }
+  }, [editingMessage]);
 
   // Auto-grow textarea only when text wraps past the first line
   useEffect(() => {
@@ -59,6 +67,21 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!text.trim()) return;
+
+    // Edit mode — update existing message
+    if (editingMessage) {
+      setLoading(true);
+      try {
+        await chatAPI.editMessage(editingMessage.id, text.trim(), currentUser.username);
+        onEditDone?.(editingMessage.id, text.trim());
+        setText('');
+      } catch (err) {
+        alert(err.response?.data?.message || 'Failed to edit message');
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
 
     console.log(`
 📤 Sending message:`, {
@@ -175,7 +198,20 @@ const MessageInput = ({ currentUser, selectedUser, onMessageSent, replyingTo, on
 
   return (
     <div className="message-input-wrapper">
-      {replyingTo && (
+      {editingMessage && (
+        <div className="edit-preview">
+          <div className="edit-preview-content">
+            <span className="edit-preview-label">Editing</span>
+            <span className="edit-preview-text">{editingMessage.text}</span>
+          </div>
+          <button className="edit-preview-cancel" onClick={() => { onEditCancel?.(); setText(''); }} aria-label="Cancel edit">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" width="16" height="16">
+              <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+      )}
+      {replyingTo && !editingMessage && (
         <ReplyPreview replyTo={replyingTo} onCancel={onReplyCancel} />
       )}
       <MediaPopup

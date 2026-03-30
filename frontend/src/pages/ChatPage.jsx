@@ -39,13 +39,16 @@ const ChatPage = ({ currentUser, onLogout, onCurrentUserUpdate }) => {
   }, []);
 
   const handleReply = useCallback((msg) => setReplyingTo(msg), []);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const handleEdit = useCallback((msg) => setEditingMessage(msg), []);
 
   const handleSelectUser = useCallback((user) => {
     setSelectedUser(user);
     setReplyingTo(null);
+    setEditingMessage(null);
   }, []);
 
-  const handleBack = useCallback(() => { setSelectedUser(null); setReplyingTo(null); }, []);
+  const handleBack = useCallback(() => { setSelectedUser(null); setReplyingTo(null); setEditingMessage(null); }, []);
 
   const handleMessageSent = useCallback((message) => {
     setMessages((prev) => [...prev, message]);
@@ -293,14 +296,14 @@ const ChatPage = ({ currentUser, onLogout, onCurrentUserUpdate }) => {
             </div>
           ) : (
             <>
-              <ChatWindow currentUser={currentUser} selectedUser={selectedUser} messages={messages} setMessages={setMessages} onReply={handleReply} unreadCounts={unreadCounts} onClearUnread={handleClearUnread} onBack={handleBack} scrollTrigger={scrollTrigger} onMessageDeletedForAll={(otherUsername) => {
+              <ChatWindow currentUser={currentUser} selectedUser={selectedUser} messages={messages} setMessages={setMessages} onReply={handleReply} onEdit={handleEdit} unreadCounts={unreadCounts} onClearUnread={handleClearUnread} onBack={handleBack} scrollTrigger={scrollTrigger} onMessageDeletedForAll={(otherUsername) => {
                 setLastMessages((prev) => {
                   if (!prev[otherUsername]) return prev;
                   return { ...prev, [otherUsername]: { ...prev[otherUsername], text: 'This message was deleted', deletedForAll: true } };
                 });
               }} />
               {selectedUser && (
-                <MessageInput currentUser={currentUser} selectedUser={selectedUser} onMessageSent={handleMessageSent} replyingTo={replyingTo} onReplyCancel={() => setReplyingTo(null)} onMediaMenuToggle={(open) => { if (open) setScrollTrigger(s => s + 1); }} />
+                <MessageInput currentUser={currentUser} selectedUser={selectedUser} onMessageSent={handleMessageSent} replyingTo={replyingTo} onReplyCancel={() => setReplyingTo(null)} editingMessage={editingMessage} onEditCancel={() => setEditingMessage(null)} onEditDone={(msgId, newText) => { setMessages(prev => prev.map(m => String(m._id) === String(msgId) ? { ...m, text: newText, editedAt: new Date() } : m)); setEditingMessage(null); }} onMediaMenuToggle={(open) => { if (open) setScrollTrigger(s => s + 1); }} />
               )}
             </>
           )}
